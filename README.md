@@ -30,20 +30,20 @@ http://localhost:5173/?seed=20260621
 
 ## Docker Compose
 
-開発サーバ:
+開発サーバ（ホットリロード）と本番相当の静的配信（Apache httpd）を同時に起動します:
 
 ```bash
-docker compose --profile dev up --build dev
+docker compose up
 ```
 
-本番相当の静的配信:
+- dev: `http://localhost:5173/`（コード変更を即時反映）
+- web: `http://localhost:8080/`（イメージビルド時点のdistを配信。コード変更後は再ビルドが必要）
+
+`web` 側にコード変更を反映するには再ビルドします:
 
 ```bash
-docker compose --profile web up --build web
+docker compose up --build web
 ```
-
-- dev: `http://localhost:5173/`
-- web: `http://localhost:8080/`
 
 ## テスト
 

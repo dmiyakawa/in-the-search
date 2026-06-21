@@ -2,8 +2,6 @@ services:
   dev:
     image: node:20-bookworm-slim
     working_dir: /app
-    profiles:
-      - dev
     ports:
       - "5173:5173"
     environment:
@@ -17,8 +15,6 @@ services:
     build:
       context: .
       target: web
-    profiles:
-      - web
     ports:
       - "8080:80"
 
