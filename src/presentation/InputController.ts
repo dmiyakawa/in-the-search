@@ -54,6 +54,33 @@ const currentPlayerSideUnitId = (
   return state.units.find(isPlayerSide)?.id;
 };
 
+const createPlayerAttackIndicator = (
+  state: ReturnType<GameService['getState']>,
+  attackerId: string,
+  targetId: string,
+  to: Hex
+): AttackIndicator | undefined => {
+  const attacker = state.units.find((unit) => unit.id === attackerId && isPlayerSide(unit));
+  const targetUnit = state.units.find((unit) => unit.id === targetId);
+  const targetNest = state.nests.find((nest) => nest.id === targetId);
+  const target = targetUnit ?? targetNest;
+  if (!attacker || !target) return undefined;
+  const targetHpAfter = Math.max(0, target.hp - attacker.attack);
+  return {
+    attackerId,
+    targetId,
+    targetKind: targetUnit?.kind === 'enemy' ? 'enemy' : targetNest ? 'nest' : undefined,
+    targetMaxHp: target.maxHp,
+    targetHpBefore: target.hp,
+    targetHpAfter,
+    targetDestroyed: targetHpAfter === 0,
+    from: attacker.coord,
+    to,
+    damage: attacker.attack,
+    side: 'player',
+  };
+};
+
 const dispatchForTarget = (
   service: GameService,
   selectedUnitId: string,
@@ -66,16 +93,10 @@ const dispatchForTarget = (
 
   const targetId = findVisibleTargetId(service, target);
   if (targetId && distance(unit.coord, target) === 1) {
+    const indicator = createPlayerAttackIndicator(state, unit.id, targetId, target);
     const result = service.dispatch({ type: 'AttackUnit', attackerId: unit.id, targetId });
     if (result.ok) {
-      onPlayerAttack?.({
-        attackerId: unit.id,
-        targetId,
-        from: unit.coord,
-        to: target,
-        damage: unit.attack,
-        side: 'player',
-      });
+      if (indicator) onPlayerAttack?.(indicator);
     }
     return result.ok;
   }

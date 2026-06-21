@@ -103,3 +103,30 @@ test('clicking an attackable enemy attacks instead of selecting it', async ({ pa
   );
   expect(restoredEnemyHp).toBe(4);
 });
+
+test('defeated enemy remains visible as a planned down state until undo', async ({ page }) => {
+  await page.goto('/?__scenario=ui-kill&__test=1');
+  const canvas = page.locator('canvas#game');
+  const view = await page.evaluate(() =>
+    (window as unknown as { __ITS_TEST__: TestHook }).__ITS_TEST__.getView()
+  );
+  const point = (hex: { q: number; r: number }) => hexToPixel(hex, view.size, view.origin);
+
+  await canvas.click({ position: point({ q: 1, r: -1 }) });
+
+  const enemyExists = await page.evaluate(() =>
+    (window as unknown as { __ITS_TEST__: TestHook }).__ITS_TEST__
+      .getState()
+      .units.some((unit) => unit.id === 'e0')
+  );
+  expect(enemyExists).toBe(false);
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toContainText('HP 2/4 -> 0/4');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toContainText('Down this phase');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toHaveClass(/doomed/);
+
+  await page.keyboard.press('U');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toContainText('HP 2/4');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).not.toContainText(
+    'Down this phase'
+  );
+});

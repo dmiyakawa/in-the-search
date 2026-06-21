@@ -50,9 +50,10 @@ const createE2eWinState = (): GameState => {
   };
 };
 
-const createE2eUiState = (): GameState => {
+const createE2eUiState = (enemyHp?: number): GameState => {
   const player = createPlayer('player', { q: 0, r: 0 });
   const enemy = createEnemy('e0', { q: 1, r: -1 });
+  if (enemyHp !== undefined) enemy.hp = enemyHp;
   let map = createEmptyMap(2);
   const podTile = map.tiles['0,0']!;
   map = setTile(map, { ...podTile, feature: 'pod', resourceAmount: 1 });
@@ -84,6 +85,7 @@ const createInitialState = (): GameState => {
   const params = new URLSearchParams(window.location.search);
   if (params.get('__scenario') === 'win') return createE2eWinState();
   if (params.get('__scenario') === 'ui') return createE2eUiState();
+  if (params.get('__scenario') === 'ui-kill') return createE2eUiState(2);
   return GameService.newGame(readSeed());
 };
 

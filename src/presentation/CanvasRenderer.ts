@@ -9,6 +9,11 @@ export type View = { size: number; origin: Point };
 export type AttackIndicator = {
   attackerId: string;
   targetId: string;
+  targetKind?: 'enemy' | 'nest';
+  targetMaxHp?: number;
+  targetHpBefore?: number;
+  targetHpAfter?: number;
+  targetDestroyed?: boolean;
   from: Hex;
   to: Hex;
   damage: number;
@@ -95,6 +100,22 @@ const drawArrowHead = (
   ctx.lineTo(x - size * Math.cos(angle + Math.PI / 6), y - size * Math.sin(angle + Math.PI / 6));
   ctx.closePath();
   ctx.fill();
+};
+
+const drawDefeatMarker = (ctx: CanvasRenderingContext2D, center: Point, size: number): void => {
+  ctx.save();
+  ctx.lineWidth = Math.max(3, size * 0.12);
+  ctx.strokeStyle = '#ff6b6b';
+  ctx.beginPath();
+  ctx.moveTo(center.x - size * 0.32, center.y - size * 0.32);
+  ctx.lineTo(center.x + size * 0.32, center.y + size * 0.32);
+  ctx.moveTo(center.x + size * 0.32, center.y - size * 0.32);
+  ctx.lineTo(center.x - size * 0.32, center.y + size * 0.32);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(center.x, center.y, size * 0.48, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 };
 
 const drawAttackIndicator = (
@@ -284,6 +305,9 @@ export const render = (
 
   if (playerAttack && state.status === 'playing') {
     drawAttackIndicator(ctx, playerAttack, view, -1);
+    if (playerAttack.targetDestroyed) {
+      drawDefeatMarker(ctx, hexToPixel(playerAttack.to, view.size, view.origin), view.size);
+    }
   }
 
   for (const unit of state.units) {

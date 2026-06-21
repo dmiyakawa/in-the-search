@@ -31,6 +31,33 @@ const targetCoord = (state: GameState, targetId: string) =>
   state.units.find((target) => target.id === targetId)?.coord ??
   state.nests.find((target) => target.id === targetId)?.coord;
 
+const createPlayerAttackIndicator = (
+  state: GameState,
+  attackerId: string,
+  targetId: string,
+  to: GameState['pod']['coord']
+): AttackIndicator | undefined => {
+  const attacker = state.units.find((candidate) => candidate.id === attackerId);
+  const targetUnit = state.units.find((target) => target.id === targetId);
+  const targetNest = state.nests.find((target) => target.id === targetId);
+  const target = targetUnit ?? targetNest;
+  if (!attacker || !isPlayerSide(attacker) || !target) return undefined;
+  const targetHpAfter = Math.max(0, target.hp - attacker.attack);
+  return {
+    attackerId,
+    targetId,
+    targetKind: targetUnit?.kind === 'enemy' ? 'enemy' : targetNest ? 'nest' : undefined,
+    targetMaxHp: target.maxHp,
+    targetHpBefore: target.hp,
+    targetHpAfter,
+    targetDestroyed: targetHpAfter === 0,
+    from: attacker.coord,
+    to,
+    damage: attacker.attack,
+    side: 'player',
+  };
+};
+
 export const renderActionMenu = (
   root: HTMLElement,
   service: GameService,
@@ -75,16 +102,10 @@ export const renderActionMenu = (
         const targetId = firstAdjacentTargetId(state, unit.id);
         const to = targetId ? targetCoord(state, targetId) : undefined;
         if (!targetId || !to) return;
+        const indicator = createPlayerAttackIndicator(state, unit.id, targetId, to);
         const result = service.dispatch({ type: 'AttackUnit', attackerId: unit.id, targetId });
         if (result.ok) {
-          onPlayerAttack?.({
-            attackerId: unit.id,
-            targetId,
-            from: unit.coord,
-            to,
-            damage: unit.attack,
-            side: 'player',
-          });
+          if (indicator) onPlayerAttack?.(indicator);
         }
       },
     });
