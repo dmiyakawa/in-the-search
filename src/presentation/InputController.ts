@@ -94,7 +94,8 @@ export const createInputController = (
   onChanged?: () => void,
   getSelection: () => Selection = () => ({ kind: 'own', id: 'player' }),
   setSelection: (selection: Selection) => void = () => undefined,
-  onPlayerAttack?: (indicator: AttackIndicator) => void
+  onPlayerAttack?: (indicator: AttackIndicator) => void,
+  onUndo?: () => void
 ): InputController => {
   const onClick = (event: MouseEvent): void => {
     const point = canvasPoint(canvas, event);
@@ -160,7 +161,10 @@ export const createInputController = (
       return;
     }
     if (event.key.toLowerCase() === 'u') {
-      if (service.undo()) onChanged?.();
+      if (service.undo()) {
+        onUndo?.();
+        onChanged?.();
+      }
       return;
     }
     if (event.key.toLowerCase() === 'g') {

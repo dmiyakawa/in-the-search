@@ -38,7 +38,8 @@ export const renderActionMenu = (
   view: View,
   selection: Selection,
   onChanged: () => void,
-  onPlayerAttack?: (indicator: AttackIndicator) => void
+  onPlayerAttack?: (indicator: AttackIndicator) => void,
+  onUndo?: () => void
 ): void => {
   root.replaceChildren();
   root.hidden = true;
@@ -100,7 +101,7 @@ export const renderActionMenu = (
       label: 'Undo (U)',
       enabled: service.canUndo(),
       action: () => {
-        service.undo();
+        if (service.undo()) onUndo?.();
       },
     }
   );

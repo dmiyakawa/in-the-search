@@ -88,6 +88,18 @@ test('clicking an attackable enemy attacks instead of selecting it', async ({ pa
         .units.find((unit) => unit.id === 'e0')?.hp
   );
   expect(enemyHp).toBe(2);
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toContainText('HP 4/4 -> 2/4');
   await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).not.toHaveClass(/selected/);
   await expect(page.locator('#unit-panel [data-unit-id="player"]')).toHaveClass(/selected/);
+
+  await page.keyboard.press('U');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toContainText('HP 4/4');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).not.toContainText('->');
+  const restoredEnemyHp = await page.evaluate(
+    () =>
+      (window as unknown as { __ITS_TEST__: TestHook }).__ITS_TEST__
+        .getState()
+        .units.find((unit) => unit.id === 'e0')?.hp
+  );
+  expect(restoredEnemyHp).toBe(4);
 });

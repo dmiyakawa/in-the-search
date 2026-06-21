@@ -1,11 +1,13 @@
 import type { GameState } from '../application/state';
 import { getTile } from '../domain/map';
+import type { AttackIndicator } from './CanvasRenderer';
 import type { Selection } from './selection';
 
 export const renderEnemyList = (
   root: HTMLElement,
   state: GameState,
-  selection: Selection
+  selection: Selection,
+  playerAttack?: AttackIndicator
 ): void => {
   root.replaceChildren();
 
@@ -33,9 +35,18 @@ export const renderEnemyList = (
     row.className = 'panel-row enemy-row';
     if (selection.kind === 'enemy' && selection.id === enemy.id) row.classList.add('selected');
     row.dataset.enemyId = enemy.id;
+    const damage =
+      playerAttack?.side === 'player' && playerAttack.targetId === enemy.id
+        ? playerAttack.damage
+        : 0;
+    const hpBefore = enemy.hp + damage;
+    const hpLabel =
+      damage > 0
+        ? `HP ${hpBefore}/${enemy.maxHp} -> ${enemy.hp}/${enemy.maxHp}`
+        : `HP ${enemy.hp}/${enemy.maxHp}`;
     row.innerHTML = `
       <span class="row-main">${enemy.id}</span>
-      <span class="row-stat">HP ${enemy.hp}/${enemy.maxHp}</span>
+      <span class="row-stat">${hpLabel}</span>
     `;
     root.append(row);
   }

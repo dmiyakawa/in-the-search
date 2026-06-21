@@ -113,6 +113,10 @@ let view: View = { size: 32, origin: { x: 0, y: 0 } };
 let selection: Selection = { kind: 'own', id: 'player' };
 let lastPlayerAttack: AttackIndicator | undefined;
 
+const clearPlayerAttack = (): void => {
+  lastPlayerAttack = undefined;
+};
+
 const normalizeSelection = (): Selection => {
   const state = service.getState();
   if (selection.kind === 'own') {
@@ -168,25 +172,43 @@ const resize = (): void => {
   render(ctx, state, view, prediction, currentSelection, lastPlayerAttack);
   renderHud(hud, state, prediction, ownId, computeHudActions(ownId));
   renderUnitList(unitPanel, state, prediction, currentSelection, computeHudActions);
-  renderEnemyList(enemyPanel, state, currentSelection);
-  renderActionMenu(actionMenu, service, state, view, currentSelection, redraw, (indicator) => {
-    lastPlayerAttack = indicator;
-  });
+  renderEnemyList(enemyPanel, state, currentSelection, lastPlayerAttack);
+  renderActionMenu(
+    actionMenu,
+    service,
+    state,
+    view,
+    currentSelection,
+    redraw,
+    (indicator) => {
+      lastPlayerAttack = indicator;
+    },
+    clearPlayerAttack
+  );
 };
 
 const redraw = (): void => {
   const state = service.getState();
-  if (state.phase !== 'player' || state.status !== 'playing') lastPlayerAttack = undefined;
+  if (state.phase !== 'player' || state.status !== 'playing') clearPlayerAttack();
   const prediction = state.status === 'playing' ? service.previewEnemyPhase() : undefined;
   const currentSelection = normalizeSelection();
   const ownId = selectedOwnId(currentSelection);
   render(ctx, state, view, prediction, currentSelection, lastPlayerAttack);
   renderHud(hud, state, prediction, ownId, computeHudActions(ownId));
   renderUnitList(unitPanel, state, prediction, currentSelection, computeHudActions);
-  renderEnemyList(enemyPanel, state, currentSelection);
-  renderActionMenu(actionMenu, service, state, view, currentSelection, redraw, (indicator) => {
-    lastPlayerAttack = indicator;
-  });
+  renderEnemyList(enemyPanel, state, currentSelection, lastPlayerAttack);
+  renderActionMenu(
+    actionMenu,
+    service,
+    state,
+    view,
+    currentSelection,
+    redraw,
+    (indicator) => {
+      lastPlayerAttack = indicator;
+    },
+    clearPlayerAttack
+  );
 };
 
 service.subscribe((event) => {
@@ -213,7 +235,8 @@ createInputController(
   },
   (indicator) => {
     lastPlayerAttack = indicator;
-  }
+  },
+  clearPlayerAttack
 );
 unitPanel.addEventListener('click', (event) => {
   const row = (event.target as HTMLElement).closest<HTMLElement>('[data-unit-id]');
