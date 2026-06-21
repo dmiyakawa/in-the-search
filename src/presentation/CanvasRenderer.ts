@@ -256,7 +256,7 @@ export const render = (
   view: View,
   prediction?: EnemyPhasePrediction,
   selection?: Selection,
-  playerAttack?: AttackIndicator
+  playerAttacks: AttackIndicator[] = []
 ): void => {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -303,10 +303,15 @@ export const render = (
     drawPreview(ctx, state, prediction, view);
   }
 
-  if (playerAttack && state.status === 'playing') {
-    drawAttackIndicator(ctx, playerAttack, view, -1);
-    if (playerAttack.targetDestroyed) {
-      drawDefeatMarker(ctx, hexToPixel(playerAttack.to, view.size, view.origin), view.size);
+  if (state.status === 'playing') {
+    playerAttacks.forEach((attack, index) => {
+      drawAttackIndicator(ctx, attack, view, -1 - index * 0.7);
+    });
+    const defeatedTargets = new Set<string>();
+    for (const attack of playerAttacks) {
+      if (!attack.targetDestroyed || defeatedTargets.has(attack.targetId)) continue;
+      defeatedTargets.add(attack.targetId);
+      drawDefeatMarker(ctx, hexToPixel(attack.to, view.size, view.origin), view.size);
     }
   }
 

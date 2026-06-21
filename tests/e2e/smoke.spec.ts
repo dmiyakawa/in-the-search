@@ -130,3 +130,32 @@ test('defeated enemy remains visible as a planned down state until undo', async 
     'Down this phase'
   );
 });
+
+test('multiple planned attacks aggregate enemy damage and undo in reverse order', async ({
+  page,
+}) => {
+  await page.goto('/?__scenario=ui-multi-attack&__test=1');
+  const canvas = page.locator('canvas#game');
+  const view = await page.evaluate(() =>
+    (window as unknown as { __ITS_TEST__: TestHook }).__ITS_TEST__.getView()
+  );
+  const point = (hex: { q: number; r: number }) => hexToPixel(hex, view.size, view.origin);
+
+  await canvas.click({ position: point({ q: 1, r: -1 }) });
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toContainText('HP 3/4 -> 1/4');
+
+  await canvas.click({ position: point({ q: 0, r: -1 }) });
+  await canvas.click({ position: point({ q: 1, r: -1 }) });
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toContainText('HP 3/4 -> 0/4');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toContainText('Down this phase');
+
+  await page.keyboard.press('U');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toContainText('HP 3/4 -> 1/4');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).not.toContainText(
+    'Down this phase'
+  );
+
+  await page.keyboard.press('U');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toContainText('HP 3/4');
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).not.toContainText('->');
+});

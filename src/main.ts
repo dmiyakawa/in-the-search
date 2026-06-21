@@ -1,6 +1,13 @@
 import { GameService } from './application/GameService';
 import type { GameState } from './application/state';
-import { createEnemy, createPlayer, isPlayerSide, POD_DEFENSE, POD_HP } from './domain/units';
+import {
+  createEnemy,
+  createPlayer,
+  createScout,
+  isPlayerSide,
+  POD_DEFENSE,
+  POD_HP,
+} from './domain/units';
 import { createEmptyMap, getTile, setTile } from './domain/map';
 import { updateVisibility } from './domain/rules/fog';
 import { render, type AttackIndicator, type View } from './presentation/CanvasRenderer';
@@ -81,11 +88,44 @@ const createE2eUiState = (enemyHp?: number): GameState => {
   };
 };
 
+const createE2eMultiAttackState = (): GameState => {
+  const player = createPlayer('player', { q: 0, r: 0 });
+  const scout = createScout('r0', { q: 0, r: -1 });
+  const enemy = createEnemy('e0', { q: 1, r: -1 });
+  enemy.hp = 3;
+  let map = createEmptyMap(2);
+  const podTile = map.tiles['0,0']!;
+  map = setTile(map, { ...podTile, feature: 'pod' });
+  const { map: visibleMap } = updateVisibility(map, [player, scout]);
+  return {
+    map: visibleMap,
+    units: [player, scout, enemy],
+    pod: {
+      id: 'pod',
+      coord: player.coord,
+      hp: POD_HP,
+      maxHp: POD_HP,
+      defense: POD_DEFENSE,
+    },
+    nests: [],
+    inventory: { resource: 0 },
+    turn: 1,
+    phase: 'player',
+    status: 'playing',
+    turnState: {
+      movementLeft: { player: 0, r0: 0 },
+      hasActed: { player: false, r0: false },
+    },
+    rngState: 0,
+  };
+};
+
 const createInitialState = (): GameState => {
   const params = new URLSearchParams(window.location.search);
   if (params.get('__scenario') === 'win') return createE2eWinState();
   if (params.get('__scenario') === 'ui') return createE2eUiState();
   if (params.get('__scenario') === 'ui-kill') return createE2eUiState(2);
+  if (params.get('__scenario') === 'ui-multi-attack') return createE2eMultiAttackState();
   return GameService.newGame(readSeed());
 };
 
@@ -113,10 +153,18 @@ if (!ctx) {
 const service = new GameService(createInitialState());
 let view: View = { size: 32, origin: { x: 0, y: 0 } };
 let selection: Selection = { kind: 'own', id: 'player' };
-let lastPlayerAttack: AttackIndicator | undefined;
+let playerAttacks: AttackIndicator[] = [];
 
-const clearPlayerAttack = (): void => {
-  lastPlayerAttack = undefined;
+const clearPlayerAttacks = (): void => {
+  playerAttacks = [];
+};
+
+const appendPlayerAttack = (indicator: AttackIndicator): void => {
+  playerAttacks = [...playerAttacks, indicator];
+};
+
+const undoPlayerAttack = (): void => {
+  playerAttacks = playerAttacks.slice(0, -1);
 };
 
 const normalizeSelection = (): Selection => {
@@ -171,10 +219,10 @@ const resize = (): void => {
   const prediction = state.status === 'playing' ? service.previewEnemyPhase() : undefined;
   const currentSelection = normalizeSelection();
   const ownId = selectedOwnId(currentSelection);
-  render(ctx, state, view, prediction, currentSelection, lastPlayerAttack);
+  render(ctx, state, view, prediction, currentSelection, playerAttacks);
   renderHud(hud, state, prediction, ownId, computeHudActions(ownId));
   renderUnitList(unitPanel, state, prediction, currentSelection, computeHudActions);
-  renderEnemyList(enemyPanel, state, currentSelection, lastPlayerAttack);
+  renderEnemyList(enemyPanel, state, currentSelection, playerAttacks);
   renderActionMenu(
     actionMenu,
     service,
@@ -182,23 +230,21 @@ const resize = (): void => {
     view,
     currentSelection,
     redraw,
-    (indicator) => {
-      lastPlayerAttack = indicator;
-    },
-    clearPlayerAttack
+    appendPlayerAttack,
+    undoPlayerAttack
   );
 };
 
 const redraw = (): void => {
   const state = service.getState();
-  if (state.phase !== 'player' || state.status !== 'playing') clearPlayerAttack();
+  if (state.phase !== 'player' || state.status !== 'playing') clearPlayerAttacks();
   const prediction = state.status === 'playing' ? service.previewEnemyPhase() : undefined;
   const currentSelection = normalizeSelection();
   const ownId = selectedOwnId(currentSelection);
-  render(ctx, state, view, prediction, currentSelection, lastPlayerAttack);
+  render(ctx, state, view, prediction, currentSelection, playerAttacks);
   renderHud(hud, state, prediction, ownId, computeHudActions(ownId));
   renderUnitList(unitPanel, state, prediction, currentSelection, computeHudActions);
-  renderEnemyList(enemyPanel, state, currentSelection, lastPlayerAttack);
+  renderEnemyList(enemyPanel, state, currentSelection, playerAttacks);
   renderActionMenu(
     actionMenu,
     service,
@@ -206,10 +252,8 @@ const redraw = (): void => {
     view,
     currentSelection,
     redraw,
-    (indicator) => {
-      lastPlayerAttack = indicator;
-    },
-    clearPlayerAttack
+    appendPlayerAttack,
+    undoPlayerAttack
   );
 };
 
@@ -222,7 +266,7 @@ service.subscribe((event) => {
     event.type === 'GameWon' ||
     event.type === 'GameLost'
   ) {
-    lastPlayerAttack = undefined;
+    clearPlayerAttacks();
   }
   redraw();
 });
@@ -236,9 +280,9 @@ createInputController(
     selection = nextSelection;
   },
   (indicator) => {
-    lastPlayerAttack = indicator;
+    appendPlayerAttack(indicator);
   },
-  clearPlayerAttack
+  undoPlayerAttack
 );
 unitPanel.addEventListener('click', (event) => {
   const row = (event.target as HTMLElement).closest<HTMLElement>('[data-unit-id]');

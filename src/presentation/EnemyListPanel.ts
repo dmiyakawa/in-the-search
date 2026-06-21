@@ -7,7 +7,7 @@ export const renderEnemyList = (
   root: HTMLElement,
   state: GameState,
   selection: Selection,
-  playerAttack?: AttackIndicator
+  playerAttacks: AttackIndicator[] = []
 ): void => {
   root.replaceChildren();
 
@@ -20,15 +20,25 @@ export const renderEnemyList = (
     if (unit.kind !== 'enemy') return false;
     return getTile(state.map, unit.coord)?.visibility === 'visible';
   });
-  const defeatedEnemy =
-    playerAttack?.side === 'player' &&
-    playerAttack.targetKind === 'enemy' &&
-    playerAttack.targetDestroyed &&
-    !enemies.some((enemy) => enemy.id === playerAttack.targetId)
-      ? playerAttack
-      : undefined;
+  const attacksByEnemy = new Map<
+    string,
+    { damage: number; targetMaxHp: number; targetHpAfter: number; targetDestroyed: boolean }
+  >();
+  for (const attack of playerAttacks) {
+    if (attack.side !== 'player' || attack.targetKind !== 'enemy') continue;
+    const current = attacksByEnemy.get(attack.targetId);
+    attacksByEnemy.set(attack.targetId, {
+      damage: (current?.damage ?? 0) + attack.damage,
+      targetMaxHp: attack.targetMaxHp ?? current?.targetMaxHp ?? 0,
+      targetHpAfter: attack.targetHpAfter ?? current?.targetHpAfter ?? 0,
+      targetDestroyed: Boolean(current?.targetDestroyed || attack.targetDestroyed),
+    });
+  }
+  const defeatedEnemies = [...attacksByEnemy.entries()].filter(
+    ([id, attack]) => attack.targetDestroyed && !enemies.some((enemy) => enemy.id === id)
+  );
 
-  if (enemies.length === 0 && !defeatedEnemy) {
+  if (enemies.length === 0 && defeatedEnemies.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'panel-empty';
     empty.textContent = 'None visible';
@@ -42,12 +52,10 @@ export const renderEnemyList = (
     row.className = 'panel-row enemy-row';
     if (selection.kind === 'enemy' && selection.id === enemy.id) row.classList.add('selected');
     row.dataset.enemyId = enemy.id;
-    const damage =
-      playerAttack?.side === 'player' && playerAttack.targetId === enemy.id
-        ? playerAttack.damage
-        : 0;
-    const hpBefore = playerAttack?.targetHpBefore ?? enemy.hp + damage;
-    const hpAfter = playerAttack?.targetHpAfter ?? enemy.hp;
+    const attack = attacksByEnemy.get(enemy.id);
+    const damage = attack?.damage ?? 0;
+    const hpBefore = enemy.hp + damage;
+    const hpAfter = attack?.targetHpAfter ?? enemy.hp;
     if (damage > 0 && hpAfter <= 0) row.classList.add('doomed');
     const hpLabel =
       damage > 0
@@ -61,13 +69,14 @@ export const renderEnemyList = (
     root.append(row);
   }
 
-  if (defeatedEnemy) {
+  for (const [enemyId, attack] of defeatedEnemies) {
     const row = document.createElement('div');
     row.className = 'panel-row enemy-row doomed';
-    row.dataset.enemyId = defeatedEnemy.targetId;
+    row.dataset.enemyId = enemyId;
+    const hpBefore = attack.targetHpAfter + attack.damage;
     row.innerHTML = `
-      <span class="row-main">${defeatedEnemy.targetId}</span>
-      <span class="row-stat">HP ${defeatedEnemy.targetHpBefore}/${defeatedEnemy.targetMaxHp} -> 0/${defeatedEnemy.targetMaxHp}</span>
+      <span class="row-main">${enemyId}</span>
+      <span class="row-stat">HP ${hpBefore}/${attack.targetMaxHp} -> 0/${attack.targetMaxHp}</span>
       <span class="row-alert">Down this phase</span>
     `;
     root.append(row);
