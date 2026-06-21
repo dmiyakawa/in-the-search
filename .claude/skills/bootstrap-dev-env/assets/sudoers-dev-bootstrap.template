@@ -1,0 +1,22 @@
+# dev-bootstrap-install.sh の4サブコマンドだけをNOPASSWD許可するsudoersスニペット
+#
+# 前提（必ず守ること。守らない場合この設定は実質的に無制限のroot権限と同じになる）:
+#   1. /usr/local/sbin/dev-bootstrap-install.sh は root:root 所有・mode 0755 で、
+#      __USERNAME__ からは書き込めないこと
+#      （sudo install -o root -g root -m 0755 dev-bootstrap-install.sh /usr/local/sbin/）
+#   2. このファイルは /etc/sudoers.d/ 配下に visudo -cf で文法チェックしてから置くこと
+#      （直接editorで /etc/sudoers を編集しない）
+#   3. サブコマンドに引数を追加できないよう、下の4行は完全一致のコマンド文字列のままにする
+#      （ワイルドカードを増やすと、想定外の引数で別の挙動を起こせる余地が生まれる）
+#
+# このルールが許可するのは「apt-get/aptによるパッケージ管理」「Docker関連リポジトリ追加」
+# 「usermod -aG docker」「playwright install-deps」に限られる、固定ロジックの実行であり、
+# `sudo bash` のような汎用root shellではない。
+# ただしapt経由のパッケージインストール自体は本質的に強い権限である
+# （postinstスクリプトがrootで走る、信頼するリポジトリが攻撃されればroot権限を奪われる等）
+# ことは理解した上で導入すること。
+
+__USERNAME__ ALL=(root) NOPASSWD: /usr/local/sbin/dev-bootstrap-install.sh apt-bootstrap
+__USERNAME__ ALL=(root) NOPASSWD: /usr/local/sbin/dev-bootstrap-install.sh install-gh
+__USERNAME__ ALL=(root) NOPASSWD: /usr/local/sbin/dev-bootstrap-install.sh install-docker
+__USERNAME__ ALL=(root) NOPASSWD: /usr/local/sbin/dev-bootstrap-install.sh playwright-deps

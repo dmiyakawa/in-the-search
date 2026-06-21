@@ -68,81 +68,46 @@
 
 ## Phase 1: ドメイン層（純粋ロジック）
 
-- [ ] **`domain/hex`** — `docs/hex-reference.md` の §0〜6 を**そのまま実装**
+- [x] **`domain/hex`** — `docs/hex-reference.md` の §0〜6 を**そのまま実装**（§8 `hexLine` も含む）
   - 対象: `src/domain/hex/index.ts`（`Hex`/`Cube`/`axialToCube`/`cubeToAxial`/`HEX_DIRECTIONS`/`add`/
-    `neighbors`/`equals`/`distance`/`cubeRound`/`axialRound`/`hexToPixel`/`pixelToHex`/`key`/`parseKey`）。
-  - 要点: 式・近傍順・cube丸め補正は hex-reference を一字一句踏襲（独自に導出し直さない）。
-  - テスト: `tests/unit/hex.test.ts` は hex-reference §7 のリスト（往復・pixel往復・境界丸め・距離・近傍・キー）。
+    `neighbors`/`equals`/`distance`/`cubeRound`/`axialRound`/`hexToPixel`/`pixelToHex`/`key`/`parseKey`/`hexLine`）。
+  - 要点: 式・近傍順・cube丸め補正は hex-reference を一字一句踏襲。`-0` 正規化を追加。
+  - テスト: `tests/unit/hex.test.ts` は hex-reference §7 のリスト + `hexLine`。
   - 完了: hex-reference §4 の数値例3件と §7 を含む全テスト green。
-- [ ] **`domain/map`** — Tile / GameMap とヘルパ
-  - 対象: `src/domain/map/`。型は `types-reference §1`。API:
-    ```ts
-    coordsInRadius(R: number): Hex[];          // 六角領域の全座標
-    createEmptyMap(R: number): GameMap;         // 全 passable / visibility 'unknown' / resource 0
-    inBounds(map: GameMap, h: Hex): boolean;    // |q|,|r|,|q+r| <= R
-    getTile(map: GameMap, h: Hex): Tile | undefined;
-    setTile(map: GameMap, t: Tile): GameMap;    // 純粋: 新 GameMap を返す
-    tilesWithin(map: GameMap, center: Hex, radius: number): Tile[]; // distance<=radius かつ存在するタイル
-    ```
+- [x] **`domain/map`** — Tile / GameMap とヘルパ
+  - 対象: `src/domain/map/`（`types.ts` + `index.ts`）。型は `types-reference §1`。API:
+    `coordsInRadius` / `createEmptyMap` / `inBounds` / `getTile` / `setTile` / `tilesWithin`。
   - 要点: `coordsInRadius` は `for q in -R..R: for r in max(-R,-q-R)..min(R,-q+R)`。キーは `key()`。
-  - テスト: `coordsInRadius(R).length === 3R²+3R+1`、`inBounds` 境界、`set→get` 往復、`tilesWithin` の距離条件。
+  - テスト: `tests/unit/map.test.ts`。`coordsInRadius(R).length === 3R²+3R+1`、`inBounds` 境界、`set→get` 往復、`tilesWithin` の距離条件。
   - 完了: 上記テスト green。
-- [ ] **`domain/units`** — ファクトリと定数
-  - 対象: `src/domain/units/`。型・定数は `types-reference §1,§5`。API:
-    ```ts
-    createPlayer(id: string, coord: Hex): Unit;          // UNIT_STATS.player を適用
-    createEnemy(id: string, coord: Hex): Unit;           // UNIT_STATS.enemy
-    createScout(id: string, coord: Hex): Unit;           // UNIT_STATS.scout, robotKind:'scout'
-    createNest(id: string, coord: Hex): Nest;            // hp=maxHp=NEST_HP
-    isPlayerSide(u: Unit): boolean;                      // kind==='player' || 'robot'
-    ```
-  - テスト: 各ファクトリが `types-reference §5` の数値・`hp===maxHp`・`isPlayerSide` の真偽。
-- [ ] **`domain/rules/movement`** — 移動妥当性（純粋・判定のみ）
+- [x] **`domain/units`** — ファクトリと定数
+  - 対象: `src/domain/units/`（`types.ts` / `stats.ts` / `index.ts`）。型・定数は `types-reference §1,§5`。API:
+    `createPlayer` / `createEnemy` / `createScout` / `createNest` / `isPlayerSide`。
+  - テスト: `tests/unit/units.test.ts`。各ファクトリが `types-reference §5` の数値・`hp===maxHp`・`isPlayerSide` の真偽。
+- [x] **`domain/rules/movement`** — 移動妥当性（純粋・判定のみ）
   - 対象: `src/domain/rules/movement.ts`。API:
-    ```ts
-    // 1歩移動が可能か。可なら null、不可なら理由を返す（occupant は呼び出し側が渡す）
-    checkMove(map: GameMap, from: Hex, to: Hex, occupantAt: (h: Hex) => Unit | undefined):
-      null | 'not-adjacent' | 'out-of-bounds' | 'blocked-terrain' | 'occupied';
-    ```
+    `checkMove(map, from, to, occupantAt): null | MoveRejection`。
   - 要点: `distance(from,to)!==1`→not-adjacent / `!inBounds`→out-of-bounds / `tile.terrain==='blocked'`→
     blocked-terrain / `occupantAt(to)` 在り→occupied。状態は変更しない。
-  - テスト: 4種の拒否 + 正常（隣接 passable 空き）で null。
-- [ ] **`domain/rules/fog`** — 視界更新（純粋）
+  - テスト: `tests/unit/movement.test.ts`。4種の拒否 + 正常（隣接 passable 空き）で null。
+- [x] **`domain/rules/fog`** — 視界更新（純粋）
   - 対象: `src/domain/rules/fog.ts`。API:
-    ```ts
-    updateVisibility(map: GameMap, playerUnits: Unit[]): { map: GameMap; nowVisible: CoordKey[] };
-    ```
-  - 要点（擬似コード）:
-    ```
-    out = clone(map)
-    for tile in out: if tile.visibility==='visible' tile.visibility='discovered'  // 降格
-    nowVisible=[]
-    for u in playerUnits:
-      for tile in tilesWithin(out, u.coord, u.vision):
-        if tile.visibility!=='visible': nowVisible.push(key(tile.coord))
-        tile.visibility='visible'
-    return { map: out, nowVisible }
-    ```
-  - テスト: 視界内が visible・範囲外の既知が discovered に降格・unknown は範囲外なら据え置き・
-    複数ユニットの和集合・`nowVisible` に新規可視のみ含む。`rule.md §3`。
-- [ ] **`domain/rules/combat`** — ダメージ解決（純粋）
+    `updateVisibility(map, playerUnits): { map, nowVisible }`。
+  - 要点: 前ターン visible → 今ターン discovered 降格 → 自ユニット視界内を visible に更新。`nowVisible` は新規可視タイル。
+  - テスト: `tests/unit/fog.test.ts`。視界内が visible・範囲外の既知が discovered に降格・unknown は範囲外なら据え置き・
+    複数ユニットの和集合・`nowVisible` に新規可視タイルが含まれる。`rule.md §3`。
+- [x] **`domain/rules/combat`** — ダメージ解決（純粋）
   - 対象: `src/domain/rules/combat.ts`。API:
-    ```ts
-    resolveAttack(attacker: { attack: number }, targetHp: number):
-      { damage: number; targetHpAfter: number; destroyed: boolean };
-    ```
+    `resolveAttack(attacker, targetHp): { damage, targetHpAfter, destroyed }`。
   - 要点: `damage=attacker.attack`（確定・乱数なし）、`targetHpAfter=max(0,targetHp-damage)`、
     `destroyed = targetHpAfter===0`。隣接判定は呼び出し側（Phase 2）。`rule.md §6`。
-  - テスト: 通常ダメージ・超過で0止まり・撃破フラグ。
-- [ ] **`domain/rules/victory`** — 勝敗判定（純粋）
+  - テスト: `tests/unit/combat.test.ts`。通常ダメージ・超過で0止まり・撃破フラグ。
+- [x] **`domain/rules/victory`** — 勝敗判定（純粋）
   - 対象: `src/domain/rules/victory.ts`。API:
-    ```ts
-    // goalReachedByPlayerSide: プレイヤー相で自ユニットが goal に乗った瞬間 true
-    evaluateStatus(input: { goalReached: boolean; playerAlive: boolean }): 'playing' | 'won' | 'lost';
-    ```
+    `evaluateStatus({ goalReached, playerAlive }): 'playing' | 'won' | 'lost'`。
   - 要点: `goalReached`→`'won'`（**勝利優先**）/ それ以外で `!playerAlive`→`'lost'` / 他は `'playing'`。
     優先順位は `rule.md §4.1`。
-  - テスト: 競合時（両 true）に won・敗北のみ・継続。
+  - テスト: `tests/unit/victory.test.ts`。競合時（両 true）に won・敗北のみ・継続。
 
 ## Phase 2: サービス層（application）
 
