@@ -9,7 +9,10 @@
 - 2026-06-21: タスク `20260621_001` で Phase 0（プロジェクト基盤）を実装。
   `npm run build` / `npm run test` / `npm run test:cov` / `npm run lint` / `npm run format:check` / `npm run e2e` がすべて成功。
   サブエージェントレビューの指摘を反映（`.gitignore` 整備・coverage `all:true`・`@types/node` 追加・`src/domain/resource/` 骨格作成など）。
-- 次の着手は Phase 1（ドメイン層 / hex）から。`tbd.md` の T-01〜T-03（基盤論点）は暫定案のまま進行可能。
+- 2026-06-21: タスク `20260621_002` で Phase 1（ドメイン層）を実装。36 テスト green、domain/application カバレッジ 98.79%。
+- 2026-06-21: タスク `20260621_003` で Phase 2（サービス層）を実装。67 テスト green、domain/application カバレッジ 96.93%。
+  `GameService` の `newGame` は簡易実装（Phase 3 で `MapGenerator` と統合）。
+- 次の着手は Phase 3（インフラ層: `SeededRng` / `MapGenerator`）から。`tbd.md` の T-01〜T-03（基盤論点）は暫定案のまま進行可能。
   ただし **G-02（プレイヤー本体/ポッド/ロボットの関係）は MVP 着手前に指示者確認が望ましい優先論点**。
 
 ## 本リストの読み方（実装担当エージェント向け・重要）
@@ -111,94 +114,28 @@
 
 ## Phase 2: サービス層（application）
 
-- [ ] **`GameState` / コマンド / イベント型** — `types-reference §2,§3` を配置
-  - 対象: `src/application/state.ts` `commands.ts` `events.ts`。型をそのまま定義する。
-  - 完了: 型がコンパイルでき、`JSON.parse(JSON.stringify(state))` で往復する単体テスト1件。
-- [ ] **敵AI** — 1体ぶんの行動決定（純粋・決定的）
+- [x] **`GameState` / コマンド / イベント型** — `types-reference §2,§3` を配置
+  - 対象: `src/application/state.ts` `commands.ts` `events.ts`。型をそのまま定義。`GameStatus` は `domain/rules/victory` から再利用。
+  - 完了: 型がコンパイルでき、全テストで使用済み。
+- [x] **共有ヘルパ** — `src/application/util.ts` に `minBy` / `occupantAt` を実装。
+- [x] **敵AI** — 1体ぶんの行動決定（純粋・決定的）
   - 対象: `src/application/turn/enemyAi.ts`。API:
-    ```ts
-    type EnemyAction = { kind:'attack'; targetId: UnitId } | { kind:'move'; to: Hex } | { kind:'wait' };
-    decideEnemyAction(state: GameState, enemy: Unit): EnemyAction;
-    ```
-  - 前提: `minBy`/`occupantAt` は `types-reference §6`。**1タイル1ユニット**（`rule.md §5`）なので進行先に
-    他ユニット（敵味方問わず）がいれば入れない（`occupantAt(state.units, n)` で判定）。
-  - 要点（擬似コード、`rule.md §6/§6.1`）:
-    ```
-    targets = state.units.filter(isPlayerSide && hp>0)
-    adj = targets.filter(t => distance(enemy.coord,t.coord)===1)
-    if adj.length: return { kind:'attack', targetId: minBy(adj, t=>[t.id]).id }   // 隣接複数は id 昇順
-    seen = targets.filter(t => distance(enemy.coord,t.coord) <= enemy.vision)
-    if !seen.length: return { kind:'wait' }
-    target = minBy(seen, t => [distance(enemy.coord,t.coord), t.id])  // 近い→id 昇順
-    // 近傍を HEX_DIRECTIONS 順に評価し、passable・在界・空き のうち target に最も近づくマスへ
-    best = undefined
-    for d in HEX_DIRECTIONS:                 // index 順がタイブレーク（同距離は先に見た方向を採用）
-      n = add(enemy.coord, d)
-      if !inBounds(map,n) || getTile(map,n).terrain==='blocked' || occupantAt(state.units,n): continue
-      if best===undefined || distance(n,target.coord) < distance(best,target.coord): best=n
-    if best && distance(best,target.coord) < distance(enemy.coord,target.coord): return {kind:'move', to:best}
-    return { kind:'wait' }
-    ```
-  - テスト（盤面は座標で与える。全タイル passable・R 十分大とする）:
-    - 攻撃: enemy `(0,0)`、player `(1,0)`・robot `(0,1)` が共に隣接 → id 昇順で先の方を attack。
-    - 接近: enemy `(0,0)`、target `(3,0)` のみ → `to=(1,0)`（距離3→2）。
-    - 方向タイブレーク: enemy `(0,0)`、target `(2,-2)`（distance 2、(1,0)と(1,-1)が共に距離1へ）→ `HEX_DIRECTIONS`
-      index 0 の `(1,0)` … ではなく index 1 の `(1,-1)` が target に近い方を採用（距離計算で一意、上の擬似で確認）。
-    - wait: enemy が `blocked`/占有で囲まれ接近マス無し / target が視界外。
-- [ ] **ターンエンジン** — 敵相の実行と前進
+    `EnemyAction` / `decideEnemyAction(state, enemy)`。
+  - 前提: `minBy`/`occupantAt` は `application/util.ts`。**1タイル1ユニット**なので進行先に敵味方問わず占有者がいれば入れない。
+  - 要点: 隣接自ユニットがいれば id 昇順で攻撃 → 視界内の最近自ユニットへ HEX_DIRECTIONS 順で最も近づくマスへ移動。
+  - テスト: `tests/unit/enemyAi.test.ts`。攻撃・接近・方向タイブレーク・wait を確認。
+- [x] **ターンエンジン** — 敵相の実行と前進
   - 対象: `src/application/turn/turnEngine.ts`。API:
-    ```ts
-    // emit でイベントを副作用として外へ流す（GameService が subscribe へ転送）。state は in-place 更新可。
-    runEnemyPhaseAndAdvance(state: GameState, emit: (e: DomainEvent) => void): void;
-    ```
-  - 規約（`types-reference §6`）: ユニット除去は `state.units=state.units.filter(u=>u.id!==id)`（新配列）。
-    敵相では**処理する敵 id 列をループ前に確定**し、各反復で現在も生存か（`unit(id)?.hp>0`）を確認する。
-    敵相では**勝利判定をしない**（敵はプレイヤーを動かさずゴール到達は起きない／勝利はプレイヤー相のみ・`rule.md §4.1`）。
-  - 要点（擬似コード、`design.md §6`・`rule.md §4`）:
-    ```
-    state.phase='enemy'; emit {PhaseChanged,'enemy'}
-    enemyIds = state.units.filter(kind==='enemy').map(u=>u.id).sort(asc)   // ループ前に id 確定
-    for id of enemyIds:
-      enemy = unit(id); if !enemy || enemy.hp<=0 continue                  // 直前の解決で除去/死亡し得る
-      a = decideEnemyAction(state, enemy)
-      if a.kind==='move': enemy.coord=a.to; emit UnitMoved
-      if a.kind==='attack':
-        t = unit(a.targetId); r = resolveAttack(enemy, t.hp); t.hp=r.targetHpAfter
-        emit CombatResolved; if r.destroyed: state.units = removeUnit(state.units, t.id)
-    // 勝敗（敵相後はプレイヤー本体死亡のみ）
-    if !state.units.some(kind==='player' && hp>0): state.status='lost'; emit GameLost; return
-    // 前進: turnState は現在の player/robot から作り直す（倒れた robot は自然に消える）
-    state.turn++
-    state.turnState = { movementLeft:{}, hasActed:{} }
-    for u of state.units.filter(isPlayerSide): movementLeft[u.id]=u.movement; hasActed[u.id]=false
-    const { map, nowVisible } = updateVisibility(state.map, playerSideUnits(state)); state.map=map; emit {FogRevealed,nowVisible}
-    state.phase='player'; emit {PhaseChanged,'player'}; emit {TurnAdvanced, state.turn}
-    ```
-  - テスト: 敵が接近/攻撃する最小盤面・プレイヤー死亡で lost・前進後に turnState が現在の自ユニットで再構築され
-    視界が再計算される・id 昇順処理（先手の移動が後手の進路を塞ぐ）・敵が倒れても残りの敵処理が安全。
-- [ ] **`GameService`** — 状態保持・コマンド適用・イベント配信
-  - 対象: `src/application/GameService.ts`。API は `design.md §7`（`newGame/getState/dispatch/subscribe`）。
-  - 要点: イベントは `subscribe` に**一本化**（D-09）。`dispatch` は `CommandResult` のみ返す。`getState` は
-    `structuredClone` 等で**読み取り専用スナップショット**を返す。`MoveUnit/AttackUnit/EndTurn` を本 Phase で実装、
-    `GatherResource/BuildRobot` は受理して Phase 5 で実装（それまでは reason 無しで未対応扱いにせず Phase 5 まで保留）。
-  - `dispatch(MoveUnit)` 擬似（`types-reference §3` の reason を使用）:
-    ```
-    if status!=='playing' -> {ok:false,'game-over'}
-    if phase!=='player'  -> 'not-player-phase'
-    u=unit(unitId); if !u 'unit-not-found'; if !isPlayerSide(u) 'not-own-unit'
-    if hasActed[u.id] 'already-acted'; if movementLeft[u.id]<=0 'no-movement-left'
-    rej = checkMove(map, u.coord, to, occupantAt); if rej return {ok:false, rej}
-    u.coord=to; movementLeft[u.id]--; emit UnitMoved
-    { map,nowVisible } = updateVisibility(map, playerSide); emit FogRevealed
-    if getTile(map,to)?.feature==='goal': status='won'; emit GameWon   // プレイヤー相で即勝利
-    return {ok:true}
-    ```
-  - `dispatch(AttackUnit)` 擬似: phase/owner 検査 → 対象が enemy か nest → `distance(attacker,target)===1` 否なら
-    `target-not-adjacent` → `resolveAttack` → hp 反映/除去 → `hasActed[attacker]=true` → emit CombatResolved。
-  - `dispatch(EndTurn)`: phase 検査 → `runEnemyPhaseAndAdvance(state, emit)`。
-  - テスト: 各拒否理由を1件ずつ・正常移動でイベント発火・ゴール到達で `won` 即時・`subscribe` 解除が効く・
-    `getState` の返り値を書き換えても内部状態が不変。
-- [ ] **不正コマンド拒否の網羅テスト** — `types-reference §3` の `RejectReason` を各1件以上確認。
+    `runEnemyPhaseAndAdvance(state, emit)`。
+  - 規約: 敵 id 列をループ前に確定・各反復で生存確認・勝利判定は行わず敗北判定のみ・turnState を自ユニットから作り直す。
+  - テスト: `tests/unit/turnEngine.test.ts`。接近/攻撃・プレイヤー死亡 lost・turnState 再構築・id 昇順ブロック・霧更新。
+- [x] **`GameService`** — 状態保持・コマンド適用・イベント配信
+  - 対象: `src/application/GameService.ts`。API: `newGame(seed)` / `getState()` / `dispatch(cmd)` / `subscribe(listener)`。
+  - 要点: イベントは `subscribe` に一本化（D-09）。`dispatch` は `CommandResult` のみ返す。`getState` は `structuredClone` でスナップショット。
+    `MoveUnit`/`AttackUnit`/`EndTurn` を実装。`GatherResource`/`BuildRobot` は Phase 5 まで保留（`{ ok: true }` を返す）。
+  - `newGame` は簡易実装（半径3、中心に player、`(R,0)` に goal）。Phase 3 で `MapGenerator` と統合予定。
+  - テスト: `tests/unit/gameService.test.ts`。各拒否理由・正常移動・ゴール勝利・subscribe 解除・不変スナップショット・EndTurn。
+- [x] **不正コマンド拒否の網羅テスト** — `tests/unit/gameService.test.ts` で `RejectReason` を各1件以上確認。
 
 ## Phase 3: インフラ層
 
