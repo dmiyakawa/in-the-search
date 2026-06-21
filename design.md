@@ -360,8 +360,9 @@ type DomainEvent =
   **レンダリング規則**: 地形・特別タイル（pod/goal/nest）は `discovered` 以上で記憶表示するが、
   **敵ユニットは `visible` タイル上のときだけ描画**する。自ユニットは常に描画する。
 - **InputController**: クリック座標 → pixel→hex 変換 → 対象hexへの妥当なコマンドを `GameService` に発行。
-  キーボード（移動・ターン終了）も補助的に対応。
-- **Hud**: ターン数・プレイヤーHP・資源在庫・状態（playing/won/lost）・操作ヒントをDOMで表示。
+  キーボードは矢印移動、`Tab` の自ユニット切替、`G` の資源採取、`B` の `scout` 建造、`U` のUndo、`E` のターン終了に対応。
+- **Hud**: ターン数・選択中ユニット、プレイヤーHP、ポッドHP、敵相被ダメ予測、資源在庫、状態（playing/won/lost）、
+  操作ヒントをDOMで表示。
 - 描画はゲーム規則を持たず、**状態の写像**に徹する（クリーンアーキテクチャの境界を守る）。
 
 ---
@@ -377,6 +378,7 @@ type DomainEvent =
 - **結合（Vitest）**: `GameService` をコマンド列で駆動し、UI無しで**ミニ通しプレイ**を再現
   （新規開始→数ターン移動→ゴール到達で `won`／敵に倒されて `lost`）。
 - **E2E（Playwright）**: ページ起動 → クリックで移動 → ゴール到達で勝利表示、までを検証。
+  MVPでは `?__scenario=win&__test=1` のテスト専用シナリオで既知のCanvasクリック経路を安定化する。
 - **カバレッジ閾値の対象範囲**（ADR D-10）: Vitest の coverage は `src/domain` と `src/application` を
   **include 対象**として80%以上を強制する。`src/presentation` と `src/infrastructure` の薄いアダプタは
   閾値の対象外とし、E2E（Playwright）で担保する（E2Eのカバレッジは Vitest 閾値に算入されないため、

@@ -1,4 +1,8 @@
 import { GameService } from './application/GameService';
+import type { GameState } from './application/state';
+import { createPlayer, POD_DEFENSE, POD_HP } from './domain/units';
+import { createEmptyMap, setTile } from './domain/map';
+import { updateVisibility } from './domain/rules/fog';
 import { render, type View } from './presentation/CanvasRenderer';
 import { createInputController } from './presentation/InputController';
 import { renderHud } from './presentation/Hud';
@@ -9,6 +13,43 @@ const readSeed = (): number => {
   if (!raw) return 20260621;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed >>> 0 : 20260621;
+};
+
+const createE2eWinState = (): GameState => {
+  const player = createPlayer('player', { q: 0, r: 0 });
+  let map = createEmptyMap(2);
+  const podTile = map.tiles['0,0']!;
+  const goalTile = map.tiles['2,0']!;
+  map = setTile(map, { ...podTile, feature: 'pod' });
+  map = setTile(map, { ...goalTile, feature: 'goal' });
+  const { map: visibleMap } = updateVisibility(map, [player]);
+  return {
+    map: visibleMap,
+    units: [player],
+    pod: {
+      id: 'pod',
+      coord: player.coord,
+      hp: POD_HP,
+      maxHp: POD_HP,
+      defense: POD_DEFENSE,
+    },
+    nests: [],
+    inventory: { resource: 0 },
+    turn: 1,
+    phase: 'player',
+    status: 'playing',
+    turnState: {
+      movementLeft: { player: player.movement },
+      hasActed: { player: false },
+    },
+    rngState: 0,
+  };
+};
+
+const createInitialState = (): GameState => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('__scenario') === 'win') return createE2eWinState();
+  return GameService.newGame(readSeed());
 };
 
 const canvas = document.getElementById('game');
@@ -23,7 +64,7 @@ if (!ctx) {
   throw new Error('Canvas 2D context is unavailable');
 }
 
-const service = new GameService(GameService.newGame(readSeed()));
+const service = new GameService(createInitialState());
 let view: View = { size: 32, origin: { x: 0, y: 0 } };
 let selectedUnitId = 'player';
 
@@ -82,3 +123,19 @@ createInputController(
 );
 window.addEventListener('resize', resize);
 resize();
+
+declare global {
+  interface Window {
+    __ITS_TEST__?: {
+      getState: () => Readonly<GameState>;
+      getView: () => View;
+    };
+  }
+}
+
+if (new URLSearchParams(window.location.search).has('__test')) {
+  window.__ITS_TEST__ = {
+    getState: () => service.getState(),
+    getView: () => view,
+  };
+}

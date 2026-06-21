@@ -5,7 +5,7 @@
 - 2026-06-21: Phase 0〜3 を実装完了（基盤／ドメイン／サービス層／インフラ）。`SeededRng`・`MapGenerator`・
   `StoragePort` 実装、`GameService.newGame` を決定的マップ生成へ統合。79 テスト green、domain/application カバレッジ ~97%。
 - 2026-06-21: タスク `20260621_007` で Phase 4（プレゼンテーション層と統合）の主要実装を完了。
-  Canvas描画、クリック/キー入力、HUD、`main.ts` 起動配線、E2E smoke 更新まで実施。**手動MVPループ確認は未実施**。
+  Canvas描画、クリック/キー入力、HUD、`main.ts` 起動配線、E2E smoke 更新まで実施。MVPループ確認は後続タスクで補完済み。
 - 2026-06-21: タスク `20260621_008` で指示者の tbd 回答を資料へ反映（design 工程）。
   確定: T-01(UIフレームワークは必要時導入=D-15)・T-02(Canvas 2D 確定=D-05)・T-03(Compose 一貫確認=D-07, 前倒し方針)・
   **G-02(可動ユニット/固定建造物の分離・ポッド破壊で敗北=D-12)**・G-03/G-07/G-01/G-08(将来方針=D-14)・
@@ -24,6 +24,9 @@
 - 2026-06-21: タスク `20260621_013` で **Phase 5（ロボット/資源の最小スライス）**を実装完了。
   `GatherResource` / `BuildRobot`、scout建造、翌ターンのscout操作、Tabでの自ユニット切替、G採取/B建造を追加。
   `logs/20260621_013_impl_phase5_resource_robot.result.md` 参照。
+- 2026-06-21: タスク `20260621_014` で **Phase 6（テスト整備）/ Phase 8（ドキュメント整備）/ レビュー軽微指摘**
+  を完了。通しプレイ・決定性・E2Eクリック勝利テスト、README作成、rule/design/tbd同期、自然順ID比較と
+  `dispatch` default の `assertNever` 化を実施。`logs/20260621_014_remaining_todos.result.md` 参照。
 - `tbd.md` の T-04・G-04・G-06・G-09 は暫定案のまま進行可能。
 
 ## 本リストの読み方（実装担当エージェント向け・重要）
@@ -49,7 +52,7 @@
 
 ---
 
-## 完了済み（Phase 0–4 主要部）
+## 完了済み（Phase 0–8 主要部）
 
 実装・テスト済み。詳細仕様は実コード・`design.md`・`docs/types-reference.md`・各 `logs/2026062*_*.result.md` を正とする。
 
@@ -58,17 +61,19 @@
 - **Phase 2（サービス層）**: `GameState`/コマンド/イベント型・`util`（minBy/occupantAt）・敵AI・ターンエンジン・`GameService`。
 - **Phase 3（インフラ）**: `SeededRng`（mulberry32）・`MapGenerator`（決定的生成+到達可能性保証）・`StoragePort`。
 - **Phase 4（プレゼン/統合）**: `CanvasRenderer`・`InputController`・`Hud`・`main.ts` 統合（`?seed=` 再現対応）。
-
-> ⚠ 上記のうち victory / GameService / turnEngine / enemyAi / MapGenerator 周りは、下記「G-02 反映タスク」で
-> ポッド/敗北モデルへ追従更新する必要がある。
+- **Phase 5（ロボット/資源）**: `GatherResource` / `BuildRobot`、`scout` 建造・操作。
+- **Phase 6（テスト整備）**: 通しプレイ、決定性、E2Eクリック勝利、カバレッジ確認。
+- **Phase 7（Docker Compose / デプロイ確認）**: `dev` / `web` profiles、Apache静的配信確認、`deploy/`。
+- **Phase 8（ドキュメント整備）**: README、rule/design/tbd同期。
 
 ---
 
 ## Phase 4 残: 手動確認
 
-- [ ] **手動 MVP ループ確認** — 移動→霧→ゴール勝利／死亡敗北を手で確認（G-02 反映後の挙動で確認するのが望ましい）。
+- [x] **手動/自動 MVP ループ確認** — 移動→霧→ゴール勝利／死亡敗北を確認（G-02 反映後の挙動で確認するのが望ましい）。
   - 2026-06-21: `web` コンテナ（`http://localhost:8080`）でマウス操作により移動→**ゴール到達=勝利**まで確認済み（指示者）。
-    未確認は敗北（死亡／ポッド破壊）経路と、G-02 反映後・予見可能性（プレビュー/Undo）反映後の挙動。
+  - 2026-06-21: `tests/integration/playthrough.test.ts` でゴール勝利・プレイヤー死亡敗北、`turnEngine` テストでポッド破壊敗北、
+    `tests/e2e/smoke.spec.ts` でプレビュー/Undo表示とCanvasクリックによる勝利を確認。
 
 ## Phase 5: ロボット/資源の最小スライス
 
@@ -93,14 +98,14 @@
 
 ## Phase 6: テスト整備
 
-- [ ] **結合テスト（通しプレイ）** — `tests/integration/playthrough.test.ts`
+- [x] **結合テスト（通しプレイ）** — `tests/integration/playthrough.test.ts`
   - 要点: 固定 seed で `newGame`→コマンド列を `dispatch`→`won`/`lost` に至る2シナリオ。`subscribe` で
     集めたイベント列も検証。
-- [ ] **決定性ゴールデンテスト** — 同 seed・同コマンド列 →同 `GameState` スナップショット
+- [x] **決定性ゴールデンテスト** — 同 seed・同コマンド列 →同 `GameState` スナップショット
   - 要点: `structuredClone`/JSON で最終状態を固定スナップショットと比較（`toMatchSnapshot` 可）。D-11 の保証を担保。
-- [ ] **E2E（Playwright）** — `tests/e2e/`
+- [x] **E2E（Playwright）** — `tests/e2e/`
   - 要点: `?seed=<固定>` で起動→既知の連続クリックで移動→ゴール到達で勝利表示を assert。固定マップ前提。
-- [ ] **カバレッジ80%確認** — `npm run test:cov` が domain/application include で80%以上（D-10）。
+- [x] **カバレッジ80%確認** — `npm run test:cov` が domain/application include で80%以上（D-10）。
 
 ## Phase 7: Docker Compose / デプロイ確認（D-07: 可能なら前倒し）
 
@@ -113,15 +118,15 @@
 - [x] **`web` 配信確認** — ビルド成果物を Apache で配信し本番相当で通しプレイ。`design.md §14.2` の
   SPA フォールバック不要・`mod_rewrite` 既定無効の注意を `deploy/` に記録。
   - 2026-06-21: `docker compose --profile web up --build -d web` で起動し、`http://localhost:8080/` と
-    `http://localhost:8080/?seed=manual-web-check`、ビルド済み JS アセットの HTTP 200 を確認。ブラウザでの通しプレイは未実施。
+    `http://localhost:8080/?seed=manual-web-check`、ビルド済み JS アセットの HTTP 200 を確認。ブラウザでの勝利通しプレイは指示者確認済み。
 - [x] **`deploy/`** — Apache 設定例・配置手順（docroot・`base` 整合）。
 
 ## Phase 8: ドキュメント整備（consolidate）
 
-- [ ] **`README.md`** — 概要・起動方法（dev/web・`?seed=`・テスト実行）。
-- [ ] **`docs/rule.md` 更新** — 実装で確定した数値・挙動に合わせる（`types-reference §5` と同期）。
-- [ ] **`design.md` 更新** — 実装と突き合わせ（consolidate）。`hex-reference`/`types-reference` との乖離も解消。
-- [ ] **`tbd.md` 更新** — 実装で判明した論点を反映。
+- [x] **`README.md`** — 概要・起動方法（dev/web・`?seed=`・テスト実行）。
+- [x] **`docs/rule.md` 更新** — 実装で確定した数値・挙動に合わせる（`types-reference §5` と同期）。
+- [x] **`design.md` 更新** — 実装と突き合わせ（consolidate）。`hex-reference`/`types-reference` との乖離も解消。
+- [x] **`tbd.md` 更新** — 実装で判明した論点を反映。
 
 ---
 
@@ -197,8 +202,8 @@
   - 修正案: `unitTarget` が見つかった場合に `isPlayerSide(unitTarget)` なら `{ ok:false, reason:'target-not-enemy' }`。
     自分自身（`targetId===attackerId`）も同拒否でよい。`nestTarget` は従来どおり攻撃可（任意破壊）。
   - テスト追加: `tests/unit/gameService.test.ts` に「隣接する自軍ユニットへの `AttackUnit` が `target-not-enemy` で拒否」ケース。
-- [ ] **[軽微] 二桁以上の id でのソート順** — `src/application/turn/turnEngine.ts:20`（`.sort()`）/ `src/application/util.ts`（`minBy`）
+- [x] **[軽微] 二桁以上の id でのソート順** — `src/application/turn/turnEngine.ts:20`（`.sort()`）/ `src/application/util.ts`（`minBy`）
   - 文字列辞書順のため、敵が10体以上になると `e10 < e2` となり「id 昇順=数値順」の意図とずれる。`ENEMY_COUNT=5`（`types-reference §5`）
     の現状は問題なし（`types-reference §6` も桁が揃う前提を明記）。将来 `ENEMY_COUNT` を二桁以上に上げる際は**ゼロ埋め採番**等で対処すること。
-- [ ] **[軽微/好み] `dispatch` の到達不能 default** — `src/application/GameService.ts:88` `return cmd;`
+- [x] **[軽微/好み] `dispatch` の到達不能 default** — `src/application/GameService.ts:88` `return cmd;`
   - exhaustive 後の `never` を返す形。型は通るが意味が曖昧。`assertNever(cmd)` か `{ ok:false, ... }` の方が意図が明確。

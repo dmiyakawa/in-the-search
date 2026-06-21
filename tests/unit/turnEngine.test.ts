@@ -133,6 +133,23 @@ describe('runEnemyPhaseAndAdvance', () => {
     expect(state.units.find((u) => u.id === 'e1')?.coord).not.toEqual({ q: 1, r: 0 });
   });
 
+  test('enemy id order uses numeric suffix order for two digit ids', () => {
+    const map = createEmptyMap(4);
+    const player = createPlayer('p0', { q: 3, r: 0 });
+    const enemy10 = createEnemy('e10', { q: 0, r: 0 });
+    const enemy2 = createEnemy('e2', { q: 2, r: 0 });
+    const state = makeState([enemy10, enemy2, player]);
+    state.map = map;
+    const events: DomainEvent[] = [];
+
+    runEnemyPhaseAndAdvance(state, (event) => events.push(event));
+
+    expect(events.filter((event) => event.type === 'CombatResolved')[0]).toMatchObject({
+      attackerId: 'e2',
+    });
+    expect(state.units.find((u) => u.id === 'e10')?.coord).toEqual({ q: 1, r: 0 });
+  });
+
   test('reveals fog after advancing turn', () => {
     const player = createPlayer('p0', { q: 0, r: 0 });
     const state = makeState([player]);

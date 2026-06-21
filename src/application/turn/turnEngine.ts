@@ -4,6 +4,7 @@ import { resolveAttack } from '../../domain/rules/combat';
 import { isPlayerSide, type Unit } from '../../domain/units';
 import type { DomainEvent } from '../events';
 import type { GameState } from '../state';
+import { compareRank, idRank } from '../util';
 import { decideEnemyAction } from './enemyAi';
 
 const unitById = (state: GameState, id: string): Unit | undefined =>
@@ -108,7 +109,7 @@ const processEnemyPhase = (
   const enemyIds = state.units
     .filter((u) => u.kind === 'enemy')
     .map((u) => u.id)
-    .sort();
+    .sort((a, b) => compareRank(idRank(a), idRank(b)));
 
   for (const id of enemyIds) {
     const enemy = unitById(state, id);

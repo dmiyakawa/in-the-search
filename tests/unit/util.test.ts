@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { minBy, occupantAt } from '../../src/application/util';
+import { compareRank, idRank, minBy, occupantAt } from '../../src/application/util';
 
 describe('application util', () => {
   test('minBy picks smallest by tuple rank', () => {
@@ -18,6 +18,11 @@ describe('application util', () => {
       { id: 'a', dist: 1 },
     ];
     expect(minBy(arr, (t) => [t.dist, t.id]).id).toBe('a');
+  });
+
+  test('idRank sorts numeric suffixes naturally', () => {
+    const ids = ['e10', 'e2', 'e1'];
+    expect(ids.sort((a, b) => compareRank(idRank(a), idRank(b)))).toEqual(['e1', 'e2', 'e10']);
   });
 
   test('minBy throws on empty array', () => {

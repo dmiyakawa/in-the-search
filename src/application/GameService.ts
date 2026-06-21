@@ -25,6 +25,10 @@ import { occupantAt } from './util';
 
 export type Unsubscribe = () => void;
 
+const assertNever = (value: never): never => {
+  throw new Error(`Unhandled command: ${JSON.stringify(value)}`);
+};
+
 export class GameService {
   private state: GameState;
   private undoStack: GameState[] = [];
@@ -109,7 +113,7 @@ export class GameService {
       case 'BuildRobot':
         return this.handleBuildRobot(cmd.robotKind);
       default:
-        return cmd;
+        return assertNever(cmd);
     }
   }
 
