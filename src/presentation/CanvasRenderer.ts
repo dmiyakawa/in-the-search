@@ -115,13 +115,14 @@ const drawAttackIndicator = (
   const nx = -uy;
   const ny = ux;
   const offset = lane * view.size * 0.2;
+  const verticalLift = indicator.side === 'player' ? -view.size * 0.42 : 0;
   const start = {
     x: from.x + ux * view.size * 0.42 + nx * offset,
-    y: from.y + uy * view.size * 0.42 + ny * offset,
+    y: from.y + uy * view.size * 0.42 + ny * offset + verticalLift,
   };
   const end = {
     x: to.x - ux * view.size * 0.42 + nx * offset,
-    y: to.y - uy * view.size * 0.42 + ny * offset,
+    y: to.y - uy * view.size * 0.42 + ny * offset + verticalLift,
   };
   const color = indicator.side === 'player' ? '#8ce99a' : '#ffb36b';
 
