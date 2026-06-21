@@ -6,7 +6,10 @@
   作業リスト（本ファイル）・未決論点（`tbd.md`）・確定決定（`decisions.md`）を作成。**実コード/設定ファイルは未作成**。
 - 2026-06-21: 同タスクの追加指示で、軽量モデル（Haiku 等）が早期停止せず実装できるよう本ファイルを詳細化。
   併せて共有参照 `docs/hex-reference.md`（hex 式の正典）・`docs/types-reference.md`（型・定数の正典）を新設。
-- 次の着手は Phase 0 から。`tbd.md` の T-01〜T-03（基盤論点）は暫定案のまま進行可能。
+- 2026-06-21: タスク `20260621_001` で Phase 0（プロジェクト基盤）を実装。
+  `npm run build` / `npm run test` / `npm run test:cov` / `npm run lint` / `npm run format:check` / `npm run e2e` がすべて成功。
+  サブエージェントレビューの指摘を反映（`.gitignore` 整備・coverage `all:true`・`@types/node` 追加・`src/domain/resource/` 骨格作成など）。
+- 次の着手は Phase 1（ドメイン層 / hex）から。`tbd.md` の T-01〜T-03（基盤論点）は暫定案のまま進行可能。
   ただし **G-02（プレイヤー本体/ポッド/ロボットの関係）は MVP 着手前に指示者確認が望ましい優先論点**。
 
 ## 本リストの読み方（実装担当エージェント向け・重要）
@@ -35,32 +38,33 @@
 
 ## Phase 0: プロジェクト基盤（scaffolding）
 
-- [ ] **`package.json` / `tsconfig.json`** — TypeScript + Vite
-  - 依存（devDependencies）: `typescript` `vite` `vitest` `@vitest/coverage-v8` `@playwright/test`
-    `eslint` `@typescript-eslint/parser` `@typescript-eslint/eslint-plugin` `prettier`。
+- [x] **`package.json` / `tsconfig.json`** — TypeScript + Vite
+  - 依存（devDependencies）: `typescript` `vite` `vitest` `@vitest/coverage-v8` `@playwright/test` `@types/node`
+    `eslint` `@typescript-eslint/parser` `@typescript-eslint/eslint-plugin` `prettier` `eslint-config-prettier`。
   - scripts: `dev`=vite / `build`=`tsc --noEmit && vite build` / `preview`=vite preview /
     `test`=vitest run / `test:cov`=`vitest run --coverage` / `e2e`=playwright test / `lint` / `format`。
   - tsconfig: `strict:true`・`noUncheckedIndexedAccess:true`（Record アクセス安全化）・`target:"ES2020"`・
     `module:"ESNext"`・`moduleResolution:"Bundler"`・`include:["src","tests"]`。
   - 完了: `npm i` が通り、空 `src/main.ts` で `npm run build` が成功する。
-- [ ] **Vite 初期化** — `index.html` / `src/main.ts`
+- [x] **Vite 初期化** — `index.html` / `src/main.ts`
   - `index.html` に `<canvas id="game">` と HUD 用 `<div id="hud">`、`<script type="module" src="/src/main.ts">`。
-  - `vite.config.ts`: `base: './'`（サブパス配信耐性、`design.md §14.2`）。
+  - `vite.config.ts`: `base: './'`（サブパス配信耐性、`design.md §14.2`）、`preview.port: 4173`。
   - 完了: `npm run dev` でページが表示され、`main.ts` の `console.log` がブラウザに出る。
-- [ ] **Vitest 設定** — `vitest.config.ts`
-  - `test.environment:'node'`（domain/application はDOM不要）。
-  - `coverage`: `provider:'v8'`・`include:['src/domain/**','src/application/**']`・
+- [x] **Vitest 設定** — `vitest.config.ts`
+  - `test.environment:'node'`（domain/application はDOM不要）、e2e ディレクトリを exclude。
+  - `coverage`: `provider:'v8'`・`all:true`・`include:['src/domain/**','src/application/**']`・
     `thresholds:{ lines:80, functions:80, branches:80, statements:80 }`（D-10）。
   - 完了: ダミーテスト1件で `npm run test:cov` が走り、include 範囲だけ計測される。
-- [ ] **Playwright 設定** — `playwright.config.ts`
-  - `testDir:'tests/e2e'`・`use.baseURL:'http://localhost:4173'`・`webServer`={ `command:'npm run build && npm run preview'`, `port:4173`, `reuseExistingServer:!CI` }。
-  - 完了: 空テストで `npm run e2e` がブラウザ起動まで到達する。
-- [ ] **Lint/Format** — ESLint + Prettier
+- [x] **Playwright 設定** — `playwright.config.ts`
+  - `testDir:'tests/e2e'`・`use.baseURL:'http://localhost:4173'`・`webServer`={ `command:'npm run build && npm run preview'`, `port:4173`, `reuseExistingServer:!CI`, `timeout:120000` }。
+  - 完了: `tests/e2e/smoke.spec.ts` で `npm run e2e` がブラウザ起動・テスト成功まで到達する。
+- [x] **Lint/Format** — ESLint + Prettier
   - `@typescript-eslint` recommended + prettier 競合無効化。`format` は prettier --write。
-  - 完了: `npm run lint` が既存コードで pass。
-- [ ] **レイヤ骨格** — `design.md §4` のディレクトリ構成
-  - `src/{domain,application,infrastructure,presentation}` と `tests/{unit,integration,e2e}` を作成
-    （各々 `index.ts` か空ファイルで存在させる）。
+  - config ファイルも型付き lint 対象にするため `tsconfig.eslint.json` を新設。
+  - 完了: `npm run lint` / `npm run format:check` が既存コードで pass。
+- [x] **レイヤ骨格** — `design.md §4` のディレクトリ構成
+  - `src/{domain/{hex,map,units,resource,rules},application,infrastructure,presentation}` と
+    `tests/{unit,integration,e2e}` を作成（各々 `index.ts` か空ファイルで存在させる）。
 
 ## Phase 1: ドメイン層（純粋ロジック）
 
