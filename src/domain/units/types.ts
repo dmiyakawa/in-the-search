@@ -22,3 +22,11 @@ export type Nest = {
   hp: number;
   maxHp: number;
 };
+
+export type PodStructure = {
+  id: string;
+  coord: Hex;
+  hp: number;
+  maxHp: number;
+  defense: number;
+};

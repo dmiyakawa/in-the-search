@@ -1,20 +1,26 @@
 import type { Hex } from '../domain/hex';
-import { getTile, setTile, createEmptyMap } from '../domain/map';
+import { getTile } from '../domain/map';
 import { checkMove } from '../domain/rules/movement';
 import { resolveAttack } from '../domain/rules/combat';
 import { updateVisibility } from '../domain/rules/fog';
 import { distance } from '../domain/hex';
-import { createPlayer, isPlayerSide } from '../domain/units';
+import { createPlayer, isPlayerSide, POD_DEFENSE, POD_HP } from '../domain/units';
+import { generateMapWithRngState } from '../infrastructure/mapgen/MapGenerator';
 import type { Command, CommandResult } from './commands';
 import type { DomainEvent } from './events';
 import type { GameState } from './state';
-import { runEnemyPhaseAndAdvance } from './turn/turnEngine';
+import {
+  runEnemyPhaseAndAdvance,
+  simulateEnemyPhase,
+  type EnemyPhasePrediction,
+} from './turn/turnEngine';
 import { occupantAt } from './util';
 
 export type Unsubscribe = () => void;
 
 export class GameService {
   private state: GameState;
+  private undoStack: GameState[] = [];
   private listeners: Set<(e: DomainEvent) => void> = new Set();
 
   constructor(initialState: GameState) {
@@ -22,19 +28,21 @@ export class GameService {
   }
 
   static newGame(seed: number): GameState {
-    const R = 3;
-    const map = createEmptyMap(R);
-    const player = createPlayer('player', { q: 0, r: 0 });
-    const goalCoord = { q: R, r: 0 };
-    const goalTileRaw = getTile(map, goalCoord);
-    if (!goalTileRaw) throw new Error('Goal tile out of bounds');
-    const mapWithGoal = setTile(map, { ...goalTileRaw, feature: 'goal' });
-    const { map: visibleMap } = updateVisibility(mapWithGoal, [player]);
+    const generated = generateMapWithRngState(seed);
+    const player = createPlayer('player', generated.podCoord);
+    const { map: visibleMap } = updateVisibility(generated.map, [player]);
 
     return {
       map: visibleMap,
-      units: [player],
-      nests: [],
+      units: [player, ...generated.enemies],
+      pod: {
+        id: 'pod',
+        coord: generated.podCoord,
+        hp: POD_HP,
+        maxHp: POD_HP,
+        defense: POD_DEFENSE,
+      },
+      nests: generated.nests,
       inventory: { resource: 0 },
       turn: 1,
       phase: 'player',
@@ -43,12 +51,23 @@ export class GameService {
         movementLeft: { [player.id]: player.movement },
         hasActed: { [player.id]: false },
       },
-      rngState: seed,
+      rngState: generated.rngState,
     };
   }
 
   getState(): Readonly<GameState> {
     return structuredClone(this.state);
+  }
+
+  undo(): boolean {
+    const previous = this.undoStack.pop();
+    if (!previous) return false;
+    this.state = previous;
+    return true;
+  }
+
+  previewEnemyPhase(): EnemyPhasePrediction {
+    return simulateEnemyPhase(this.state);
   }
 
   subscribe(listener: (e: DomainEvent) => void): Unsubscribe {
@@ -104,6 +123,7 @@ export class GameService {
     const rejection = checkMove(state.map, unit.coord, to, (h) => occupantAt(state.units, h));
     if (rejection) return { ok: false, reason: rejection };
 
+    this.undoStack.push(structuredClone(state));
     const from = unit.coord;
     unit.coord = to;
     state.turnState.movementLeft[unitId] = movementLeft - 1;
@@ -137,12 +157,14 @@ export class GameService {
     const unitTarget = state.units.find((u) => u.id === targetId);
     const nestTarget = state.nests.find((n) => n.id === targetId);
     if (!unitTarget && !nestTarget) return { ok: false, reason: 'target-not-enemy' };
+    if (unitTarget && isPlayerSide(unitTarget)) return { ok: false, reason: 'target-not-enemy' };
 
     const targetCoord = unitTarget?.coord ?? nestTarget?.coord;
     if (!targetCoord) return { ok: false, reason: 'target-not-enemy' };
     if (distance(attacker.coord, targetCoord) !== 1)
       return { ok: false, reason: 'target-not-adjacent' };
 
+    this.undoStack.push(structuredClone(state));
     const targetHp = unitTarget?.hp ?? nestTarget?.hp ?? 0;
     const result = resolveAttack(attacker, targetHp);
     state.turnState.hasActed[attackerId] = true;
@@ -170,6 +192,7 @@ export class GameService {
   private handleEndTurn(): CommandResult {
     const state = this.state;
     if (state.phase !== 'player') return { ok: false, reason: 'not-player-phase' };
+    this.undoStack = [];
     runEnemyPhaseAndAdvance(state, (e) => this.emit(e));
     return { ok: true };
   }

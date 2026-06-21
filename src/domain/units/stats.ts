@@ -7,6 +7,8 @@ export const UNIT_STATS = {
 export const GATHER_AMOUNT = 5;
 export const SCOUT_COST = 10;
 export const NEST_HP = 8;
+export const POD_HP = 20;
+export const POD_DEFENSE = 0;
 
 // Map generation constants are placed here to keep numeric constants centralized.
 export const MAP_RADIUS = 7;

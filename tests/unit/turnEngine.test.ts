@@ -1,13 +1,14 @@
 import { describe, expect, test } from 'vitest';
-import { runEnemyPhaseAndAdvance } from '../../src/application/turn/turnEngine';
+import { runEnemyPhaseAndAdvance, simulateEnemyPhase } from '../../src/application/turn/turnEngine';
 import type { GameState } from '../../src/application/state';
 import type { DomainEvent } from '../../src/application/events';
 import { createEmptyMap } from '../../src/domain/map';
-import { createEnemy, createPlayer } from '../../src/domain/units';
+import { createEnemy, createPlayer, POD_DEFENSE, POD_HP } from '../../src/domain/units';
 
 const makeState = (units: GameState['units']): GameState => ({
   map: createEmptyMap(3),
   units,
+  pod: { id: 'pod', coord: { q: -99, r: 0 }, hp: POD_HP, maxHp: POD_HP, defense: POD_DEFENSE },
   nests: [],
   inventory: { resource: 0 },
   turn: 1,
@@ -18,6 +19,22 @@ const makeState = (units: GameState['units']): GameState => ({
 });
 
 describe('runEnemyPhaseAndAdvance', () => {
+  test('simulateEnemyPhase is pure and matches applied enemy phase prediction', () => {
+    const enemy = createEnemy('e0', { q: 0, r: 0 });
+    const player = createPlayer('p0', { q: 3, r: 0 });
+    const state = makeState([enemy, player]);
+    const before = structuredClone(state);
+
+    const prediction = simulateEnemyPhase(state);
+    expect(state).toEqual(before);
+
+    const events: DomainEvent[] = [];
+    const appliedPrediction = runEnemyPhaseAndAdvance(state, (e) => events.push(e));
+
+    expect(state.units.find((u) => u.id === 'e0')?.coord).toEqual({ q: 1, r: 0 });
+    expect(prediction).toEqual(appliedPrediction);
+  });
+
   test('enemy moves toward player', () => {
     const enemy = createEnemy('e0', { q: 0, r: 0 });
     const player = createPlayer('p0', { q: 3, r: 0 });
@@ -43,6 +60,37 @@ describe('runEnemyPhaseAndAdvance', () => {
 
     expect(state.units.find((u) => u.id === 'p0')?.hp).toBe(7);
     expect(events.some((e) => e.type === 'CombatResolved')).toBe(true);
+  });
+
+  test('enemy damages pod instead of player when player overlaps pod', () => {
+    const enemy = createEnemy('e0', { q: 1, r: 0 });
+    const player = createPlayer('p0', { q: 0, r: 0 });
+    const state = makeState([enemy, player]);
+    state.pod.coord = player.coord;
+    const events: DomainEvent[] = [];
+
+    runEnemyPhaseAndAdvance(state, (e) => events.push(e));
+
+    expect(state.pod.hp).toBe(POD_HP - enemy.attack);
+    expect(state.units.find((u) => u.id === 'p0')?.hp).toBe(player.maxHp);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'CombatResolved', targetId: 'pod' })
+    );
+  });
+
+  test('destroyed pod sets status to lost', () => {
+    const enemy = createEnemy('e0', { q: 1, r: 0 });
+    const player = createPlayer('p0', { q: 0, r: 0 });
+    const state = makeState([enemy, player]);
+    state.pod.coord = player.coord;
+    state.pod.hp = 1;
+    const events: DomainEvent[] = [];
+
+    runEnemyPhaseAndAdvance(state, (e) => events.push(e));
+
+    expect(state.status).toBe('lost');
+    expect(state.pod.hp).toBe(0);
+    expect(events.some((e) => e.type === 'GameLost')).toBe(true);
   });
 
   test('player death sets status to lost and stops further processing', () => {

@@ -2,9 +2,16 @@ import { describe, expect, test } from 'vitest';
 import { GameService } from '../../src/application/GameService';
 import type { DomainEvent } from '../../src/application/events';
 import type { GameState } from '../../src/application/state';
-import { createEmptyMap, setTile } from '../../src/domain/map';
+import { createEmptyMap, getTile, setTile } from '../../src/domain/map';
 import { updateVisibility } from '../../src/domain/rules/fog';
-import { createEnemy, createPlayer } from '../../src/domain/units';
+import {
+  createEnemy,
+  createPlayer,
+  createScout,
+  MAP_RADIUS,
+  POD_DEFENSE,
+  POD_HP,
+} from '../../src/domain/units';
 
 const makeState = (units: GameState['units'], mapRadius = 3): GameState => {
   const player = units.find((u) => u.kind === 'player');
@@ -13,6 +20,7 @@ const makeState = (units: GameState['units'], mapRadius = 3): GameState => {
   return {
     map: visibleMap,
     units,
+    pod: { id: 'pod', coord: { q: -99, r: 0 }, hp: POD_HP, maxHp: POD_HP, defense: POD_DEFENSE },
     nests: [],
     inventory: { resource: 0 },
     turn: 1,
@@ -37,7 +45,16 @@ describe('GameService', () => {
     expect(state.status).toBe('playing');
     expect(state.phase).toBe('player');
     expect(state.units.some((u) => u.kind === 'player')).toBe(true);
-    expect(state.map.tiles['3,0']?.feature).toBe('goal');
+    expect(state.pod).toMatchObject({
+      id: 'pod',
+      coord: { q: 0, r: 0 },
+      hp: POD_HP,
+      maxHp: POD_HP,
+      defense: POD_DEFENSE,
+    });
+    expect(state.map.radius).toBe(MAP_RADIUS);
+    expect(state.units.filter((u) => u.kind === 'enemy').length).toBeGreaterThan(0);
+    expect(Object.values(state.map.tiles).some((tile) => tile.feature === 'goal')).toBe(true);
   });
 
   test('getState returns immutable snapshot', () => {
@@ -84,7 +101,7 @@ describe('GameService', () => {
   });
 
   test('MoveUnit rejects already acted unit', () => {
-    const state = GameService.newGame(123);
+    const state = makeState([createPlayer('player', { q: 0, r: 0 })]);
     state.turnState.hasActed['player'] = true;
     const service = new GameService(state);
     const result = service.dispatch({ type: 'MoveUnit', unitId: 'player', to: { q: 1, r: 0 } });
@@ -92,7 +109,7 @@ describe('GameService', () => {
   });
 
   test('MoveUnit rejects no movement left', () => {
-    const state = GameService.newGame(123);
+    const state = makeState([createPlayer('player', { q: 0, r: 0 })]);
     state.turnState.movementLeft['player'] = 0;
     const service = new GameService(state);
     const result = service.dispatch({ type: 'MoveUnit', unitId: 'player', to: { q: 1, r: 0 } });
@@ -100,7 +117,7 @@ describe('GameService', () => {
   });
 
   test('MoveUnit rejects blocked terrain', () => {
-    const state = GameService.newGame(123);
+    const state = makeState([createPlayer('player', { q: 0, r: 0 })]);
     const blockedCoord = { q: 1, r: 0 };
     const tile = state.map.tiles[`${blockedCoord.q},${blockedCoord.r}`]!;
     state.map = setTile(state.map, { ...tile, terrain: 'blocked' });
@@ -110,7 +127,7 @@ describe('GameService', () => {
   });
 
   test('MoveUnit moves and emits events', () => {
-    const service = new GameService(GameService.newGame(123));
+    const service = new GameService(makeState([createPlayer('player', { q: 0, r: 0 })]));
     const events: DomainEvent[] = [];
     service.subscribe((e) => events.push(e));
     const result = service.dispatch({ type: 'MoveUnit', unitId: 'player', to: { q: 1, r: 0 } });
@@ -119,13 +136,54 @@ describe('GameService', () => {
     expect(events.some((e) => e.type === 'UnitMoved')).toBe(true);
   });
 
+  test('undo restores previous player-phase movement state', () => {
+    const service = new GameService(makeState([createPlayer('player', { q: 0, r: 0 })]));
+
+    service.dispatch({ type: 'MoveUnit', unitId: 'player', to: { q: 1, r: 0 } });
+    const moved = service.getState();
+    expect(moved.units.find((u) => u.id === 'player')?.coord).toEqual({ q: 1, r: 0 });
+    expect(moved.turnState.movementLeft.player).toBe(1);
+
+    expect(service.undo()).toBe(true);
+    const restored = service.getState();
+    expect(restored.units.find((u) => u.id === 'player')?.coord).toEqual({ q: 0, r: 0 });
+    expect(restored.turnState.movementLeft.player).toBe(2);
+  });
+
+  test('undo stack is cleared by EndTurn', () => {
+    const player = createPlayer('player', { q: 0, r: 0 });
+    const state = makeState([player]);
+    const service = new GameService(state);
+
+    service.dispatch({ type: 'MoveUnit', unitId: 'player', to: { q: 1, r: 0 } });
+    service.dispatch({ type: 'EndTurn' });
+
+    expect(service.undo()).toBe(false);
+  });
+
+  test('previewEnemyPhase is deterministic and does not mutate state', () => {
+    const player = createPlayer('player', { q: 3, r: 0 });
+    const enemy = createEnemy('e0', { q: 0, r: 0 });
+    const state = makeState([enemy, player]);
+    const service = new GameService(state);
+    const before = service.getState();
+
+    const first = service.previewEnemyPhase();
+    const second = service.previewEnemyPhase();
+
+    expect(first).toEqual(second);
+    expect(service.getState()).toEqual(before);
+  });
+
   test('MoveUnit to goal triggers immediate win', () => {
-    const state = GameService.newGame(123);
-    state.units[0]!.coord = { q: 2, r: 0 };
+    const state = makeState([createPlayer('player', { q: 0, r: 0 })]);
+    const goalCoord = { q: 1, r: 0 };
+    const goalTile = getTile(state.map, goalCoord)!;
+    state.map = setTile(state.map, { ...goalTile, feature: 'goal' });
     const service = new GameService(state);
     const events: DomainEvent[] = [];
     service.subscribe((e) => events.push(e));
-    const result = service.dispatch({ type: 'MoveUnit', unitId: 'player', to: { q: 3, r: 0 } });
+    const result = service.dispatch({ type: 'MoveUnit', unitId: 'player', to: goalCoord });
     expect(result).toEqual({ ok: true });
     expect(service.getState().status).toBe('won');
     expect(events.some((e) => e.type === 'GameWon')).toBe(true);
@@ -153,6 +211,20 @@ describe('GameService', () => {
     const service = new GameService(state);
     const result = service.dispatch({ type: 'AttackUnit', attackerId: 'player', targetId: 'e0' });
     expect(result).toEqual({ ok: false, reason: 'target-not-adjacent' });
+  });
+
+  test('AttackUnit rejects player-side target', () => {
+    const player = createPlayer('player', { q: 0, r: 0 });
+    const scout = createScout('r0', { q: 1, r: 0 });
+    const state = makeState([player, scout]);
+    state.turnState.movementLeft['r0'] = scout.movement;
+    state.turnState.hasActed['r0'] = false;
+    const service = new GameService(state);
+
+    const result = service.dispatch({ type: 'AttackUnit', attackerId: 'player', targetId: 'r0' });
+
+    expect(result).toEqual({ ok: false, reason: 'target-not-enemy' });
+    expect(service.getState().units.find((u) => u.id === 'r0')?.hp).toBe(scout.maxHp);
   });
 
   test('EndTurn runs enemy phase', () => {
