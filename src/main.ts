@@ -5,7 +5,7 @@ import { createEmptyMap, setTile } from './domain/map';
 import { updateVisibility } from './domain/rules/fog';
 import { render, type View } from './presentation/CanvasRenderer';
 import { createInputController } from './presentation/InputController';
-import { renderHud } from './presentation/Hud';
+import { renderHud, type HudActions } from './presentation/Hud';
 
 const readSeed = (): number => {
   const params = new URLSearchParams(window.location.search);
@@ -76,6 +76,15 @@ const normalizeSelectedUnit = (): string => {
   return selectedUnitId;
 };
 
+const computeHudActions = (selected: string): HudActions => ({
+  canMove: service.canMove(selected),
+  canAttack: service.canAttack(selected),
+  canGather: service.canGather(selected),
+  canBuild: service.canBuildRobot(),
+  canEndTurn: service.canEndTurn(),
+  canUndo: service.canUndo(),
+});
+
 const resize = (): void => {
   const ratio = window.devicePixelRatio || 1;
   canvas.width = Math.floor(window.innerWidth * ratio);
@@ -99,7 +108,7 @@ const resize = (): void => {
   const prediction = state.status === 'playing' ? service.previewEnemyPhase() : undefined;
   const selected = normalizeSelectedUnit();
   render(ctx, state, view, prediction, selected);
-  renderHud(hud, state, prediction, selected);
+  renderHud(hud, state, prediction, selected, computeHudActions(selected));
 };
 
 const redraw = (): void => {
@@ -107,7 +116,7 @@ const redraw = (): void => {
   const prediction = state.status === 'playing' ? service.previewEnemyPhase() : undefined;
   const selected = normalizeSelectedUnit();
   render(ctx, state, view, prediction, selected);
-  renderHud(hud, state, prediction, selected);
+  renderHud(hud, state, prediction, selected, computeHudActions(selected));
 };
 
 service.subscribe(redraw);

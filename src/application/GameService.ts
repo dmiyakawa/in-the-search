@@ -81,6 +81,59 @@ export class GameService {
     return simulateEnemyPhase(this.state);
   }
 
+  canMove(unitId: string): boolean {
+    const state = this.state;
+    if (state.phase !== 'player') return false;
+    if (state.turnState.hasActed[unitId]) return false;
+    const movementLeft = state.turnState.movementLeft[unitId];
+    return movementLeft !== undefined && movementLeft > 0;
+  }
+
+  canAttack(unitId: string): boolean {
+    const state = this.state;
+    if (state.phase !== 'player') return false;
+    const unit = state.units.find((u) => u.id === unitId);
+    if (!unit || !isPlayerSide(unit) || state.turnState.hasActed[unitId]) return false;
+    const hasAdjacentUnit = state.units.some(
+      (u) => !isPlayerSide(u) && distance(unit.coord, u.coord) === 1
+    );
+    const hasAdjacentNest = state.nests.some((n) => distance(unit.coord, n.coord) === 1);
+    return hasAdjacentUnit || hasAdjacentNest;
+  }
+
+  canGather(unitId: string): boolean {
+    const state = this.state;
+    if (state.phase !== 'player') return false;
+    const unit = state.units.find((u) => u.id === unitId);
+    if (!unit || !isPlayerSide(unit) || state.turnState.hasActed[unitId]) return false;
+    const tile = getTile(state.map, unit.coord);
+    return Boolean(tile && tile.resourceAmount > 0);
+  }
+
+  canBuildRobot(): boolean {
+    const state = this.state;
+    if (state.phase !== 'player') return false;
+    const player = state.units.find((u) => u.kind === 'player' && u.id === 'player');
+    if (!player) return false;
+    if (state.turnState.hasActed[player.id]) return false;
+    if (!equals(player.coord, state.pod.coord)) return false;
+    if (state.inventory.resource < SCOUT_COST) return false;
+    return HEX_DIRECTIONS.some((direction) => {
+      const coord = add(state.pod.coord, direction);
+      if (!inBounds(state.map, coord)) return false;
+      const tile = getTile(state.map, coord);
+      return Boolean(tile && tile.terrain === 'passable' && !occupantAt(state.units, coord));
+    });
+  }
+
+  canEndTurn(): boolean {
+    return this.state.phase === 'player';
+  }
+
+  canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
   subscribe(listener: (e: DomainEvent) => void): Unsubscribe {
     this.listeners.add(listener);
     return () => {
