@@ -8,11 +8,14 @@
   **タスク `20260621_016`「操作可能ユニット・行動選択肢の明示とマウス操作メニュー」**を最優先で着手する。
   設計は `design.md §12`（プレゼンテーション層を 12.1〜12.5 に詳細化）、UI 方式の確定は `decisions.md` D-17、
   敵 HP 遷移表示の将来論点は `tbd.md` G-11。リクエスト原文は `logs/20260621_016_mouse_menu.request.md`。
+- 2026-06-21: タスク `20260621_016` の T-1〜T-8 を実装完了。`Selection`、左右情報パネル、行動メニュー、
+  マス文脈クエリ、E2E UI フローを追加し、`npm run format:check && npm run lint && npm run build && npm run test &&
+  npm run e2e` が green。
 - 確定済み方針（指示者判断）:
   - **UI は素の TS + DOM を継続**（フレームワーク非導入・D-17）。presentation を小モジュールに分割する。
   - **操作はハイブリッド**（design.md §12.5）。隣接の有効マスは移動/攻撃、行動対象でない空マスのクリックで選択解除。
-- 直近の未コミット: `docs/git-guideline.md` に従い、本タスク着手前の独立変更（HUD 可視化の暫定実装・Docker Compose の
-  profile 削除と README 追従）は適宜コミットしてよい。本タスクの各実装は項目単位でコミットする。
+- 直近の未コミット: タスク `20260621_016` の実装差分が未コミット。作業記録は
+  `logs/20260621_016_mouse_menu.result.md`。
 
 ## 本リストの読み方（実装担当エージェント向け・重要）
 
@@ -32,13 +35,13 @@
 
 ---
 
-## 最優先: タスク `20260621_016`（実装順 T-1 → T-8）
+## 完了済み: タスク `20260621_016`（実装順 T-1 → T-8）
 
 > ゴール: 「自/敵ユニットの状況（HP・ターン終了時の HP 遷移・残行動）が常に画面で読め、
 > 選択ユニットで可能な操作をマウスのメニューから決定でき、理屈上の可否とそのターンの可否を同時に表現する」。
 > 既存のキーボード操作（G/B/U/E/矢印/Tab）は等価に維持する。
 
-### T-1: GameService に「マス文脈」クエリを追加（domain/application・ユニットテスト対象）
+### [x] T-1: GameService に「マス文脈」クエリを追加（domain/application・ユニットテスト対象）
 
 - 対象: `src/application/GameService.ts`
 - API（既存 `canMove/canAttack/canGather/canBuildRobot/canEndTurn/canUndo` に**追加**。副作用なし・phase 非依存）:
@@ -53,7 +56,7 @@
 - テスト: `tests/unit/gameService.test.ts`。資源マス上のユニットで `isOnResourceTile=true`／資源 0 マスで false、
   pod 上のプレイヤーで `isPlayerOnPod=true`／pod 外で false。
 
-### T-2: 選択モデル（`Selection`）を presentation に導入（main.ts 配線）
+### [x] T-2: 選択モデル（`Selection`）を presentation に導入（main.ts 配線）
 
 - 対象: `src/main.ts`、（型は `src/presentation/CanvasRenderer.ts` か新規 `src/presentation/selection.ts` に置く）
 - API:
@@ -68,7 +71,7 @@
   - `render` / 情報パネル / `ActionMenu` に `selection` と `view` を渡す。
 - テスト: ロジックは E2E（T-8）で担保。`main.ts` は薄く保つ。
 
-### T-3: InputController をハイブリッド入力へ（design.md §12.5）
+### [x] T-3: InputController をハイブリッド入力へ（design.md §12.5）
 
 - 対象: `src/presentation/InputController.ts`
 - API 変更: コールバックを選択モデルへ拡張する。
@@ -88,7 +91,7 @@
     `G`/`B`/矢印 は `own` 選択中ユニット（無ければ先頭自ユニット）を対象にする。
 - テスト: E2E（T-8）。クリック分岐は §12.5 表のとおり。
 
-### T-4: 自ユニット情報パネル（左下 DOM・design.md §12.3）
+### [x] T-4: 自ユニット情報パネル（左下 DOM・design.md §12.3）
 
 - 対象: 新規 `src/presentation/UnitListPanel.ts`、`index.html`（`#unit-panel` 追加）、CSS
 - API 例:
@@ -111,7 +114,7 @@
   - 選択中（`selection.kind==='own' && id` 一致）の行は強調。ポッド行はクリック対象外（選択不可）。
 - テスト: ロジックは E2E（T-8）。任意で `renderUnitList` のユニットテスト（DOM 文字列/クラス）。
 
-### T-5: 敵ユニット情報パネル（右下 DOM・双方向強調・§12.3）
+### [x] T-5: 敵ユニット情報パネル（右下 DOM・双方向強調・§12.3）
 
 - 対象: 新規 `src/presentation/EnemyListPanel.ts`、`index.html`（`#enemy-panel` 追加）、CSS
 - API 例: `renderEnemyList(root, state, selection): void`
@@ -120,7 +123,7 @@
   行クリックで `enemy` 選択。`selection.kind==='enemy' && id` 一致の行を強調（マップ側の強調＝T-6 と双方向で一致させる）。
 - テスト: E2E（T-8）。可視敵クリック→該当行強調、マップの可視敵クリック→同じ行が強調。
 
-### T-6: 行動メニュー（DOM オーバーレイ・§12.4）
+### [x] T-6: 行動メニュー（DOM オーバーレイ・§12.4）
 
 - 対象: 新規 `src/presentation/ActionMenu.ts`、`index.html`（`#action-menu` 追加）、CSS（不透明・`position:absolute`）
 - API 例:
@@ -149,7 +152,7 @@
   - メニューはクリックを受けるので `pointer-events:auto`、Canvas は下層のまま（T-7 の CSS）。
 - テスト: E2E（T-8）。資源マス上で Gather 表示＋有効、資源を持たず pod 上で Build 表示だが資源不足で `disabled` 等。
 
-### T-7: レイアウト/CSS と Canvas 選択強調（§12.1）
+### [x] T-7: レイアウト/CSS と Canvas 選択強調（§12.1）
 
 - 対象: `index.html`（または `src/style.css`）、`src/presentation/CanvasRenderer.ts`、`src/main.ts`
 - 要点:
@@ -162,7 +165,7 @@
   - `main.ts` の `resize()`/`redraw()` で全パネル・メニューを再描画する（既存の `renderHud` と同様に毎回呼ぶ）。
 - テスト: E2E（T-8）。UI がマップクリックを妨げない（移動が従来どおり成立する）こと。
 
-### T-8: テスト整備
+### [x] T-8: テスト整備
 
 - 対象: `tests/unit/gameService.test.ts`（T-1 のクエリ）、`tests/e2e/`（UI フロー）
 - 要点（E2E・Playwright、`?seed=<固定>` か `?__scenario=win`）:

@@ -134,6 +134,18 @@ export class GameService {
     return this.undoStack.length > 0;
   }
 
+  isOnResourceTile(unitId: string): boolean {
+    const unit = this.state.units.find((u) => u.id === unitId);
+    if (!unit) return false;
+    const tile = getTile(this.state.map, unit.coord);
+    return Boolean(tile && tile.resourceAmount > 0);
+  }
+
+  isPlayerOnPod(): boolean {
+    const player = this.state.units.find((u) => u.kind === 'player' && u.id === 'player');
+    return Boolean(player && equals(player.coord, this.state.pod.coord));
+  }
+
   subscribe(listener: (e: DomainEvent) => void): Unsubscribe {
     this.listeners.add(listener);
     return () => {

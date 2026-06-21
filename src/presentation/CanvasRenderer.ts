@@ -2,6 +2,7 @@ import { hexToPixel, type Point } from '../domain/hex';
 import type { Tile } from '../domain/map';
 import type { GameState } from '../application/state';
 import type { EnemyPhasePrediction } from '../application/turn/turnEngine';
+import type { Selection } from './selection';
 
 export type View = { size: number; origin: Point };
 
@@ -96,7 +97,7 @@ export const render = (
   state: GameState,
   view: View,
   prediction?: EnemyPhasePrediction,
-  selectedUnitId?: string
+  selection?: Selection
 ): void => {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -150,7 +151,10 @@ export const render = (
     const center = hexToPixel(unit.coord, view.size, view.origin);
     const fill = unit.kind === 'player' ? '#e9f1ff' : unit.kind === 'robot' ? '#63d2ff' : '#e05a47';
     drawToken(ctx, center, view.size * 0.36, fill);
-    if (unit.id === selectedUnitId) {
+    if (
+      (selection?.kind === 'own' && unit.id === selection.id) ||
+      (selection?.kind === 'enemy' && unit.kind === 'enemy' && unit.id === selection.id)
+    ) {
       ctx.beginPath();
       ctx.arc(center.x, center.y, view.size * 0.52, 0, Math.PI * 2);
       ctx.lineWidth = Math.max(2, view.size * 0.08);

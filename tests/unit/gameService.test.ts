@@ -273,6 +273,34 @@ describe('GameService', () => {
     expect(result).toEqual({ ok: false, reason: 'already-acted' });
   });
 
+  test('isOnResourceTile reports tile context without checking turn availability', () => {
+    const player = createPlayer('player', { q: 0, r: 0 });
+    const scout = createScout('r0', { q: 1, r: 0 });
+    const state = makeState([player, scout]);
+    const tile = getTile(state.map, player.coord)!;
+    state.map = setTile(state.map, { ...tile, resourceAmount: GATHER_AMOUNT });
+    state.turnState.hasActed.player = true;
+    const service = new GameService(state);
+
+    expect(service.isOnResourceTile('player')).toBe(true);
+    expect(service.canGather('player')).toBe(false);
+    expect(service.isOnResourceTile('r0')).toBe(false);
+    expect(service.isOnResourceTile('missing')).toBe(false);
+  });
+
+  test('isPlayerOnPod reports player and pod coordinate context', () => {
+    const player = createPlayer('player', { q: 0, r: 0 });
+    const state = makeState([player]);
+    state.pod.coord = player.coord;
+    const service = new GameService(state);
+
+    expect(service.isPlayerOnPod()).toBe(true);
+
+    const awayState = makeState([createPlayer('player', { q: 1, r: 0 })]);
+    awayState.pod.coord = { q: 0, r: 0 };
+    expect(new GameService(awayState).isPlayerOnPod()).toBe(false);
+  });
+
   test('BuildRobot creates a scout adjacent to pod and consumes resources', () => {
     const player = createPlayer('player', { q: 0, r: 0 });
     const state = makeState([player]);

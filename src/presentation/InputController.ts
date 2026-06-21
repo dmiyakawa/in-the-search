@@ -3,10 +3,9 @@ import { getTile } from '../domain/map';
 import { isPlayerSide } from '../domain/units';
 import type { GameService } from '../application/GameService';
 import type { View } from './CanvasRenderer';
+import type { Selection } from './selection';
 
 export type InputController = { destroy(): void };
-
-const playerUnitId = 'player';
 
 const canvasPoint = (canvas: HTMLCanvasElement, event: MouseEvent): { x: number; y: number } => {
   const rect = canvas.getBoundingClientRect();
@@ -29,6 +28,15 @@ const findVisibleTargetId = (service: GameService, target: Hex): string | undefi
   return state.nests.find((n) => n.coord.q === target.q && n.coord.r === target.r)?.id;
 };
 
+const findVisibleEnemyId = (service: GameService, target: Hex): string | undefined => {
+  const state = service.getState();
+  const tile = getTile(state.map, target);
+  if (tile?.visibility !== 'visible') return undefined;
+  return state.units.find(
+    (u) => u.kind === 'enemy' && u.coord.q === target.q && u.coord.r === target.r
+  )?.id;
+};
+
 const findPlayerSideUnitId = (service: GameService, target: Hex): string | undefined => {
   const state = service.getState();
   return state.units.find(
@@ -38,28 +46,29 @@ const findPlayerSideUnitId = (service: GameService, target: Hex): string | undef
 
 const currentPlayerSideUnitId = (
   service: GameService,
-  selectedUnitId: string
+  selection: Selection
 ): string | undefined => {
   const state = service.getState();
-  if (state.units.some((u) => u.id === selectedUnitId && isPlayerSide(u))) return selectedUnitId;
+  if (selection.kind === 'own' && state.units.some((u) => u.id === selection.id && isPlayerSide(u)))
+    return selection.id;
   return state.units.find(isPlayerSide)?.id;
 };
 
-const dispatchForTarget = (service: GameService, selectedUnitId: string, target: Hex): void => {
+const dispatchForTarget = (service: GameService, selectedUnitId: string, target: Hex): boolean => {
   const state = service.getState();
   const unit = state.units.find((u) => u.id === selectedUnitId && isPlayerSide(u));
-  if (!unit || state.status !== 'playing') return;
+  if (!unit || state.status !== 'playing') return false;
 
   const targetId = findVisibleTargetId(service, target);
   if (targetId && distance(unit.coord, target) === 1) {
-    service.dispatch({ type: 'AttackUnit', attackerId: unit.id, targetId });
-    return;
+    return service.dispatch({ type: 'AttackUnit', attackerId: unit.id, targetId }).ok;
   }
 
   const tile = getTile(state.map, target);
   if (tile?.terrain === 'passable' && distance(unit.coord, target) === 1) {
-    service.dispatch({ type: 'MoveUnit', unitId: unit.id, to: target });
+    return service.dispatch({ type: 'MoveUnit', unitId: unit.id, to: target }).ok;
   }
+  return false;
 };
 
 export const createInputController = (
@@ -67,8 +76,8 @@ export const createInputController = (
   service: GameService,
   getView: () => View,
   onChanged?: () => void,
-  getSelectedUnitId: () => string = () => playerUnitId,
-  setSelectedUnitId: (unitId: string) => void = () => undefined
+  getSelection: () => Selection = () => ({ kind: 'own', id: 'player' }),
+  setSelection: (selection: Selection) => void = () => undefined
 ): InputController => {
   const onClick = (event: MouseEvent): void => {
     const point = canvasPoint(canvas, event);
@@ -76,13 +85,32 @@ export const createInputController = (
     const target = pixelToHex(point.x, point.y, view.size, view.origin);
     const selectedOwnUnit = findPlayerSideUnitId(service, target);
     if (selectedOwnUnit) {
-      setSelectedUnitId(selectedOwnUnit);
+      setSelection({ kind: 'own', id: selectedOwnUnit });
       onChanged?.();
       return;
     }
-    const selectedUnitId = currentPlayerSideUnitId(service, getSelectedUnitId());
-    if (!selectedUnitId) return;
-    dispatchForTarget(service, selectedUnitId, target);
+
+    const selectedEnemy = findVisibleEnemyId(service, target);
+    if (selectedEnemy) {
+      setSelection({ kind: 'enemy', id: selectedEnemy });
+      onChanged?.();
+      return;
+    }
+
+    const selection = getSelection();
+    const selectedUnitId =
+      selection.kind === 'own' ? currentPlayerSideUnitId(service, selection) : undefined;
+    if (!selectedUnitId) {
+      setSelection({ kind: 'none' });
+      onChanged?.();
+      return;
+    }
+
+    const dispatched = dispatchForTarget(service, selectedUnitId, target);
+    if (!dispatched) {
+      setSelection({ kind: 'none' });
+    }
+    onChanged?.();
   };
 
   const keyDirections: Record<string, number> = {
@@ -98,9 +126,12 @@ export const createInputController = (
       const state = service.getState();
       const units = state.units.filter(isPlayerSide);
       if (units.length === 0) return;
-      const currentIndex = units.findIndex((u) => u.id === getSelectedUnitId());
+      const selection = getSelection();
+      const currentIndex = units.findIndex(
+        (u) => selection.kind === 'own' && u.id === selection.id
+      );
       const next = units[(currentIndex + 1) % units.length] ?? units[0]!;
-      setSelectedUnitId(next.id);
+      setSelection({ kind: 'own', id: next.id });
       onChanged?.();
       return;
     }
@@ -114,7 +145,7 @@ export const createInputController = (
       return;
     }
     if (event.key.toLowerCase() === 'g') {
-      const selectedUnitId = currentPlayerSideUnitId(service, getSelectedUnitId());
+      const selectedUnitId = currentPlayerSideUnitId(service, getSelection());
       if (selectedUnitId) service.dispatch({ type: 'GatherResource', unitId: selectedUnitId });
       return;
     }
@@ -126,7 +157,7 @@ export const createInputController = (
     const dirIndex = keyDirections[event.key];
     if (dirIndex === undefined) return;
     const state = service.getState();
-    const selectedUnitId = currentPlayerSideUnitId(service, getSelectedUnitId());
+    const selectedUnitId = currentPlayerSideUnitId(service, getSelection());
     if (!selectedUnitId) return;
     const unit = state.units.find((u) => u.id === selectedUnitId && isPlayerSide(u));
     const direction = HEX_DIRECTIONS[dirIndex];

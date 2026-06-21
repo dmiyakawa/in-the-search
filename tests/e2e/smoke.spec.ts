@@ -2,6 +2,9 @@ import { test, expect } from '@playwright/test';
 
 type TestHook = {
   getView: () => { size: number; origin: { x: number; y: number } };
+  getState: () => {
+    inventory: { resource: number };
+  };
 };
 
 const hexToPixel = (
@@ -40,4 +43,29 @@ test('wins through known canvas clicks', async ({ page }) => {
   }
 
   await expect(page.locator('#hud')).toContainText('Ship reached');
+});
+
+test('mouse selection panels and action menu expose unit context', async ({ page }) => {
+  await page.goto('/?__scenario=ui&__test=1');
+  const canvas = page.locator('canvas#game');
+  const view = await page.evaluate(() =>
+    (window as unknown as { __ITS_TEST__: TestHook }).__ITS_TEST__.getView()
+  );
+  const point = (hex: { q: number; r: number }) => hexToPixel(hex, view.size, view.origin);
+
+  await canvas.click({ position: point({ q: 0, r: 0 }) });
+  await expect(page.locator('#action-menu')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Gather (G)' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Build scout (B)' })).toBeDisabled();
+
+  await canvas.click({ position: point({ q: 2, r: 0 }) });
+  await expect(page.locator('#action-menu')).toBeHidden();
+
+  await canvas.click({ position: point({ q: 0, r: 0 }) });
+  await page.getByRole('button', { name: 'Gather (G)' }).click();
+  await expect(page.locator('#hud')).toContainText('Resource 5');
+  await expect(page.locator('#unit-panel [data-unit-id="player"]')).toHaveClass(/exhausted/);
+
+  await canvas.click({ position: point({ q: 1, r: -1 }) });
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toHaveClass(/selected/);
 });
