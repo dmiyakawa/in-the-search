@@ -2,18 +2,26 @@
 
 ## 直近の状況
 
-- 2026-06-20: タスク `20260620_001` で MVP の設計（`design.md`）・ルール正典（`docs/rule.md`）・
-  作業リスト（本ファイル）・未決論点（`tbd.md`）・確定決定（`decisions.md`）を作成。**実コード/設定ファイルは未作成**。
-- 2026-06-21: 同タスクの追加指示で、軽量モデル（Haiku 等）が早期停止せず実装できるよう本ファイルを詳細化。
-  併せて共有参照 `docs/hex-reference.md`（hex 式の正典）・`docs/types-reference.md`（型・定数の正典）を新設。
-- 2026-06-21: タスク `20260621_001` で Phase 0（プロジェクト基盤）を実装。
-  `npm run build` / `npm run test` / `npm run test:cov` / `npm run lint` / `npm run format:check` / `npm run e2e` がすべて成功。
-  サブエージェントレビューの指摘を反映（`.gitignore` 整備・coverage `all:true`・`@types/node` 追加・`src/domain/resource/` 骨格作成など）。
-- 2026-06-21: タスク `20260621_002` で Phase 1（ドメイン層）を実装。36 テスト green、domain/application カバレッジ 98.79%。
-- 2026-06-21: タスク `20260621_003` で Phase 2（サービス層）を実装。67 テスト green、domain/application カバレッジ 96.93%。
-  `GameService` の `newGame` は簡易実装（Phase 3 で `MapGenerator` と統合）。
-- 次の着手は Phase 3（インフラ層: `SeededRng` / `MapGenerator`）から。`tbd.md` の T-01〜T-03（基盤論点）は暫定案のまま進行可能。
-  ただし **G-02（プレイヤー本体/ポッド/ロボットの関係）は MVP 着手前に指示者確認が望ましい優先論点**。
+- 2026-06-21: Phase 0〜3 を実装完了（基盤／ドメイン／サービス層／インフラ）。`SeededRng`・`MapGenerator`・
+  `StoragePort` 実装、`GameService.newGame` を決定的マップ生成へ統合。79 テスト green、domain/application カバレッジ ~97%。
+- 2026-06-21: タスク `20260621_007` で Phase 4（プレゼンテーション層と統合）の主要実装を完了。
+  Canvas描画、クリック/キー入力、HUD、`main.ts` 起動配線、E2E smoke 更新まで実施。**手動MVPループ確認は未実施**。
+- 2026-06-21: タスク `20260621_008` で指示者の tbd 回答を資料へ反映（design 工程）。
+  確定: T-01(UIフレームワークは必要時導入=D-15)・T-02(Canvas 2D 確定=D-05)・T-03(Compose 一貫確認=D-07, 前倒し方針)・
+  **G-02(可動ユニット/固定建造物の分離・ポッド破壊で敗北=D-12)**・G-03/G-07/G-01/G-08(将来方針=D-14)・
+  G-05(敵接近は視界内限定・攻撃優先 player>pod>robot)・予見可能ポリシー(D-13)。`tbd.md` は T-04/G-04/G-06/G-09 のみに整理。
+  併せて本リストの完了済みタスク詳細を削除して整頓（consolidate）。`logs/20260621_008_tbd.result.md` 参照。
+- 2026-06-21: タスク `20260621_011` で **G-02 反映タスク**を実装完了。
+  `GameState.pod`、ポッド破壊敗北、pod重なり時の被弾宛先、敵AIの player>pod>robot 優先度、HUDのポッドHP表示、
+  `AttackUnit` のフレンドリーファイア防止を反映。`logs/20260621_011_impl_g02_pod_model.result.md` 参照。
+- **Docker Compose 前倒し方針（D-07）**: Phase 7 の Compose 準備は前倒しで完了。`dev`/`web` とも実起動と
+  HTTP 応答確認済み（`logs/20260621_009_impl_phase7_compose.result.md` 参照）。ブラウザでの手動通しプレイは
+  Phase 4 残タスクまたは Phase 6 E2E で継続確認する。
+- 2026-06-21: `web` コンテナ（`http://localhost:8080`）でマウス操作による手動通しプレイを確認（移動→ゴール到達=勝利）。
+  併せてタスク `20260621_012` で**アンドゥ＋敵相プレビュー（決定的予見可能性の操作実装）**を実装完了。
+  `simulateEnemyPhase`、`GameService.undo()` / `previewEnemyPhase()`、Canvas/HUDプレビュー、`U`キーUndoを追加。
+  `logs/20260621_012_impl_foreseeability.result.md` 参照。
+- `tbd.md` の T-04・G-04・G-06・G-09 は暫定案のまま進行可能。
 
 ## 本リストの読み方（実装担当エージェント向け・重要）
 
@@ -32,195 +40,32 @@
 ## Phase 間の依存（並行作業時の事故防止）
 
 - Phase 1（ドメイン）→ Phase 2（サービス層/ターンエンジン）→ Phase 3（インフラ: MapGenerator）→
-  Phase 4（プレゼン/統合）の順に依存。Phase 0（基盤）は全ての前提。
+  Phase 4（プレゼン/統合）の順に依存。Phase 0（基盤）は全ての前提。**Phase 0〜3 は実装完了**。
 - Phase 4 末の「MVPループ成立確認」は Phase 2・Phase 3 の完成が前提。
 - Phase 5（ロボット/資源）は Phase 2 の `GameService`・コマンド基盤に依存。
-- Phase 1 の各ルール関数は**純粋関数**（入力不変・新オブジェクト返却）で実装し、状態保持は Phase 2 が担う。
 
 ---
 
-## Phase 0: プロジェクト基盤（scaffolding）
+## 完了済み（Phase 0–4 主要部）
 
-- [x] **`package.json` / `tsconfig.json`** — TypeScript + Vite
-  - 依存（devDependencies）: `typescript` `vite` `vitest` `@vitest/coverage-v8` `@playwright/test` `@types/node`
-    `eslint` `@typescript-eslint/parser` `@typescript-eslint/eslint-plugin` `prettier` `eslint-config-prettier`。
-  - scripts: `dev`=vite / `build`=`tsc --noEmit && vite build` / `preview`=vite preview /
-    `test`=vitest run / `test:cov`=`vitest run --coverage` / `e2e`=playwright test / `lint` / `format`。
-  - tsconfig: `strict:true`・`noUncheckedIndexedAccess:true`（Record アクセス安全化）・`target:"ES2020"`・
-    `module:"ESNext"`・`moduleResolution:"Bundler"`・`include:["src","tests"]`。
-  - 完了: `npm i` が通り、空 `src/main.ts` で `npm run build` が成功する。
-- [x] **Vite 初期化** — `index.html` / `src/main.ts`
-  - `index.html` に `<canvas id="game">` と HUD 用 `<div id="hud">`、`<script type="module" src="/src/main.ts">`。
-  - `vite.config.ts`: `base: './'`（サブパス配信耐性、`design.md §14.2`）、`preview.port: 4173`。
-  - 完了: `npm run dev` でページが表示され、`main.ts` の `console.log` がブラウザに出る。
-- [x] **Vitest 設定** — `vitest.config.ts`
-  - `test.environment:'node'`（domain/application はDOM不要）、e2e ディレクトリを exclude。
-  - `coverage`: `provider:'v8'`・`all:true`・`include:['src/domain/**','src/application/**']`・
-    `thresholds:{ lines:80, functions:80, branches:80, statements:80 }`（D-10）。
-  - 完了: ダミーテスト1件で `npm run test:cov` が走り、include 範囲だけ計測される。
-- [x] **Playwright 設定** — `playwright.config.ts`
-  - `testDir:'tests/e2e'`・`use.baseURL:'http://localhost:4173'`・`webServer`={ `command:'npm run build && npm run preview'`, `port:4173`, `reuseExistingServer:!CI`, `timeout:120000` }。
-  - 完了: `tests/e2e/smoke.spec.ts` で `npm run e2e` がブラウザ起動・テスト成功まで到達する。
-- [x] **Lint/Format** — ESLint + Prettier
-  - `@typescript-eslint` recommended + prettier 競合無効化。`format` は prettier --write。
-  - config ファイルも型付き lint 対象にするため `tsconfig.eslint.json` を新設。
-  - 完了: `npm run lint` / `npm run format:check` が既存コードで pass。
-- [x] **レイヤ骨格** — `design.md §4` のディレクトリ構成
-  - `src/{domain/{hex,map,units,resource,rules},application,infrastructure,presentation}` と
-    `tests/{unit,integration,e2e}` を作成（各々 `index.ts` か空ファイルで存在させる）。
+実装・テスト済み。詳細仕様は実コード・`design.md`・`docs/types-reference.md`・各 `logs/2026062*_*.result.md` を正とする。
 
-## Phase 1: ドメイン層（純粋ロジック）
+- **Phase 0（基盤）**: package/tsconfig/Vite/Vitest/Playwright/ESLint・Prettier・レイヤ骨格。
+- **Phase 1（ドメイン）**: `domain/hex`・`domain/map`・`domain/units`・`domain/rules/{movement,fog,combat,victory}`。
+- **Phase 2（サービス層）**: `GameState`/コマンド/イベント型・`util`（minBy/occupantAt）・敵AI・ターンエンジン・`GameService`。
+- **Phase 3（インフラ）**: `SeededRng`（mulberry32）・`MapGenerator`（決定的生成+到達可能性保証）・`StoragePort`。
+- **Phase 4（プレゼン/統合）**: `CanvasRenderer`・`InputController`・`Hud`・`main.ts` 統合（`?seed=` 再現対応）。
 
-- [x] **`domain/hex`** — `docs/hex-reference.md` の §0〜6 を**そのまま実装**（§8 `hexLine` も含む）
-  - 対象: `src/domain/hex/index.ts`（`Hex`/`Cube`/`axialToCube`/`cubeToAxial`/`HEX_DIRECTIONS`/`add`/
-    `neighbors`/`equals`/`distance`/`cubeRound`/`axialRound`/`hexToPixel`/`pixelToHex`/`key`/`parseKey`/`hexLine`）。
-  - 要点: 式・近傍順・cube丸め補正は hex-reference を一字一句踏襲。`-0` 正規化を追加。
-  - テスト: `tests/unit/hex.test.ts` は hex-reference §7 のリスト + `hexLine`。
-  - 完了: hex-reference §4 の数値例3件と §7 を含む全テスト green。
-- [x] **`domain/map`** — Tile / GameMap とヘルパ
-  - 対象: `src/domain/map/`（`types.ts` + `index.ts`）。型は `types-reference §1`。API:
-    `coordsInRadius` / `createEmptyMap` / `inBounds` / `getTile` / `setTile` / `tilesWithin`。
-  - 要点: `coordsInRadius` は `for q in -R..R: for r in max(-R,-q-R)..min(R,-q+R)`。キーは `key()`。
-  - テスト: `tests/unit/map.test.ts`。`coordsInRadius(R).length === 3R²+3R+1`、`inBounds` 境界、`set→get` 往復、`tilesWithin` の距離条件。
-  - 完了: 上記テスト green。
-- [x] **`domain/units`** — ファクトリと定数
-  - 対象: `src/domain/units/`（`types.ts` / `stats.ts` / `index.ts`）。型・定数は `types-reference §1,§5`。API:
-    `createPlayer` / `createEnemy` / `createScout` / `createNest` / `isPlayerSide`。
-  - テスト: `tests/unit/units.test.ts`。各ファクトリが `types-reference §5` の数値・`hp===maxHp`・`isPlayerSide` の真偽。
-- [x] **`domain/rules/movement`** — 移動妥当性（純粋・判定のみ）
-  - 対象: `src/domain/rules/movement.ts`。API:
-    `checkMove(map, from, to, occupantAt): null | MoveRejection`。
-  - 要点: `distance(from,to)!==1`→not-adjacent / `!inBounds`→out-of-bounds / `tile.terrain==='blocked'`→
-    blocked-terrain / `occupantAt(to)` 在り→occupied。状態は変更しない。
-  - テスト: `tests/unit/movement.test.ts`。4種の拒否 + 正常（隣接 passable 空き）で null。
-- [x] **`domain/rules/fog`** — 視界更新（純粋）
-  - 対象: `src/domain/rules/fog.ts`。API:
-    `updateVisibility(map, playerUnits): { map, nowVisible }`。
-  - 要点: 前ターン visible → 今ターン discovered 降格 → 自ユニット視界内を visible に更新。`nowVisible` は新規可視タイル。
-  - テスト: `tests/unit/fog.test.ts`。視界内が visible・範囲外の既知が discovered に降格・unknown は範囲外なら据え置き・
-    複数ユニットの和集合・`nowVisible` に新規可視タイルが含まれる。`rule.md §3`。
-- [x] **`domain/rules/combat`** — ダメージ解決（純粋）
-  - 対象: `src/domain/rules/combat.ts`。API:
-    `resolveAttack(attacker, targetHp): { damage, targetHpAfter, destroyed }`。
-  - 要点: `damage=attacker.attack`（確定・乱数なし）、`targetHpAfter=max(0,targetHp-damage)`、
-    `destroyed = targetHpAfter===0`。隣接判定は呼び出し側（Phase 2）。`rule.md §6`。
-  - テスト: `tests/unit/combat.test.ts`。通常ダメージ・超過で0止まり・撃破フラグ。
-- [x] **`domain/rules/victory`** — 勝敗判定（純粋）
-  - 対象: `src/domain/rules/victory.ts`。API:
-    `evaluateStatus({ goalReached, playerAlive }): 'playing' | 'won' | 'lost'`。
-  - 要点: `goalReached`→`'won'`（**勝利優先**）/ それ以外で `!playerAlive`→`'lost'` / 他は `'playing'`。
-    優先順位は `rule.md §4.1`。
-  - テスト: `tests/unit/victory.test.ts`。競合時（両 true）に won・敗北のみ・継続。
+> ⚠ 上記のうち victory / GameService / turnEngine / enemyAi / MapGenerator 周りは、下記「G-02 反映タスク」で
+> ポッド/敗北モデルへ追従更新する必要がある。
 
-## Phase 2: サービス層（application）
+---
 
-- [x] **`GameState` / コマンド / イベント型** — `types-reference §2,§3` を配置
-  - 対象: `src/application/state.ts` `commands.ts` `events.ts`。型をそのまま定義。`GameStatus` は `domain/rules/victory` から再利用。
-  - 完了: 型がコンパイルでき、全テストで使用済み。
-- [x] **共有ヘルパ** — `src/application/util.ts` に `minBy` / `occupantAt` を実装。
-- [x] **敵AI** — 1体ぶんの行動決定（純粋・決定的）
-  - 対象: `src/application/turn/enemyAi.ts`。API:
-    `EnemyAction` / `decideEnemyAction(state, enemy)`。
-  - 前提: `minBy`/`occupantAt` は `application/util.ts`。**1タイル1ユニット**なので進行先に敵味方問わず占有者がいれば入れない。
-  - 要点: 隣接自ユニットがいれば id 昇順で攻撃 → 視界内の最近自ユニットへ HEX_DIRECTIONS 順で最も近づくマスへ移動。
-  - テスト: `tests/unit/enemyAi.test.ts`。攻撃・接近・方向タイブレーク・wait を確認。
-- [x] **ターンエンジン** — 敵相の実行と前進
-  - 対象: `src/application/turn/turnEngine.ts`。API:
-    `runEnemyPhaseAndAdvance(state, emit)`。
-  - 規約: 敵 id 列をループ前に確定・各反復で生存確認・勝利判定は行わず敗北判定のみ・turnState を自ユニットから作り直す。
-  - テスト: `tests/unit/turnEngine.test.ts`。接近/攻撃・プレイヤー死亡 lost・turnState 再構築・id 昇順ブロック・霧更新。
-- [x] **`GameService`** — 状態保持・コマンド適用・イベント配信
-  - 対象: `src/application/GameService.ts`。API: `newGame(seed)` / `getState()` / `dispatch(cmd)` / `subscribe(listener)`。
-  - 要点: イベントは `subscribe` に一本化（D-09）。`dispatch` は `CommandResult` のみ返す。`getState` は `structuredClone` でスナップショット。
-    `MoveUnit`/`AttackUnit`/`EndTurn` を実装。`GatherResource`/`BuildRobot` は Phase 5 まで保留（`{ ok: true }` を返す）。
-  - `newGame` は簡易実装（半径3、中心に player、`(R,0)` に goal）。Phase 3 で `MapGenerator` と統合予定。
-  - テスト: `tests/unit/gameService.test.ts`。各拒否理由・正常移動・ゴール勝利・subscribe 解除・不変スナップショット・EndTurn。
-- [x] **不正コマンド拒否の網羅テスト** — `tests/unit/gameService.test.ts` で `RejectReason` を各1件以上確認。
+## Phase 4 残: 手動確認
 
-## Phase 3: インフラ層
-
-- [ ] **`SeededRng`** — mulberry32（決定的）
-  - 対象: `src/infrastructure/rng/SeededRng.ts`。API は `types-reference §4`。実装擬似:
-    ```
-    createRng(seedOrState): let a = seedOrState>>>0
-      const step = () => { a=(a+0x6D2B79F5)|0; let t=Math.imul(a^a>>>15,1|a);
-        t=(t+Math.imul(t^t>>>7,61|t))^t; return (t^t>>>14)>>>0; }   // 0..2^32-1
-      return { nextU32:()=>step(), nextFloat:()=>step()/4294967296,
-               nextInt:(m)=>step()%m, getState:()=>a>>>0 }
-    ```
-  - テスト: 同 seed で系列一致・`getState()` から再生成して以降が一致・`nextFloat` が [0,1)・`nextInt(m)` が 0..m-1。
-- [ ] **`MapGenerator`** — 決定的生成 + 到達可能性保証
-  - 対象: `src/infrastructure/mapgen/MapGenerator.ts`。`GenResult` 型・`sampleN` は `types-reference §6`、
-    定数（`MAP_RADIUS`/`BLOCKED_RATE`/…/`MAP_GEN_MAX_RETRY`）は `types-reference §5`、`hexLine` は `hex-reference §8`。
-    API: `generateMap(seed: number): GenResult`、内部 `attempt(rng: SeededRng): GenResult`。
-  - 要点（擬似コード、`design.md §9`）。**散布は1つのプールから順に非復元抽出**（決定的に乱数を消費）:
-    ```
-    attempt(rng): -> GenResult
-      map = createEmptyMap(R=MAP_RADIUS); pod = {q:0,r:0}     // 中心固定
-      for c in coordsInRadius(R): if !equals(c,pod) && rng.nextFloat()<BLOCKED_RATE: set c blocked
-      set pod tile passable, feature 'pod'
-      cands = coordsInRadius(R).filter(c => passable(c) && distance(c,pod)>=MIN_POD_GOAL_DISTANCE)
-      goal = cands[rng.nextInt(cands.length)]; set goal passable, feature 'goal'
-      pool = coordsInRadius(R).filter(c => passable(c) && !eq(pod) && !eq(goal))   // 配置候補
-      nestCoords = sampleN(pool, NEST_COUNT, rng);            pool = pool.filter(not in nestCoords)
-      enemyCoords = sampleN(pool, ENEMY_COUNT, rng);          pool = pool.filter(not in enemyCoords)
-      resCoords  = sampleN(pool, RESOURCE_NODE_COUNT, rng)
-      nests   = nestCoords.map((c,i)=>createNest(`n${i}`,c));  set those tiles feature 'nest'
-      enemies = enemyCoords.map((c,i)=>createEnemy(`e${i}`,c))
-      for c in resCoords: getTile(map,c).resourceAmount = GATHER_AMOUNT
-      return { map, podCoord:pod, goalCoord:goal, enemies, nests }
-    generateMap(seed):
-      rng = createRng(seed); res = attempt(rng)
-      for i in 1..MAP_GEN_MAX_RETRY:
-        if bfsReachable(res.map, res.podCoord, res.goalCoord): return res
-        res = attempt(rng)                              // ★ seed を派生させず同一ストリーム継続（D-11）
-      if !bfsReachable(...): carveCorridor(res.map, res.podCoord, res.goalCoord)  // 決定的フォールバック
-      return res
-    ```
-  - 補助関数の擬似コード:
-    ```
-    sampleN(arr, n, rng): copy=arr.slice(); for i in 0..copy.len-1: j=i+rng.nextInt(copy.len-i); swap(copy[i],copy[j])
-                          return copy.slice(0, n)         // Fisher-Yates（rng のみ・Math.random 不可）
-    bfsReachable(map,a,b): BFS from a over neighbors() where inBounds && terrain==='passable'; true if b 到達
-    carveCorridor(map,a,b): for c of dedupeByKey(hexLine(a,b)): if inBounds(map,c) getTile(map,c).terrain='passable'
-                            （feature は維持。hexLine は hex-reference §8）
-    ```
-  - テスト: **決定性=`JSON.stringify(generateMap(s))` が2回呼び出しで完全一致**（再試行・フォールバック込み）・
-    pod は `{0,0}`・goal は距離条件を満たす・pod→goal が `bfsReachable`・blocked 率が概ね `BLOCKED_RATE`・
-    敵/巣/資源の座標が互いに重複せず pod/goal と重ならず passable 上・id が `e0..`/`n0..` で採番。
-- [ ] **`StoragePort` + localStorage 実装** — `types-reference §4`
-  - 対象: `src/infrastructure/storage/`。`save`=`localStorage.setItem(slot, JSON.stringify(state))`、
-    `load`=`JSON.parse(...)`（無ければ null）。MVP は最小。
-  - テスト: 保存→読込で `GameState` が深く等価（jsdom か `localStorage` モックで）。
-
-## Phase 4: プレゼンテーション層と統合
-
-- [ ] **`CanvasRenderer`** — pointy-top hex 描画
-  - 対象: `src/presentation/CanvasRenderer.ts`。API:
-    ```ts
-    type View = { size: number; origin: Point };
-    render(ctx: CanvasRenderingContext2D, state: GameState, view: View): void;
-    ```
-  - 要点（`design.md §12`）: 各タイルを `hexToPixel(coord,size,origin)` 中心の六角形で塗る。色は
-    `unknown`=描画スキップ（背景）/`discovered`=減光/`visible`=通常。`feature`（pod/goal/nest）と資源を重畳。
-    ユニット: 自ユニットは常時描画、**敵はそのタイルが `visible` のときだけ描画**（`design.md §8`）。
-  - テスト: ロジックは薄いので E2E（Phase 6）で担保。任意で hex 頂点計算のユニットテスト。
-- [ ] **`InputController`** — クリック→コマンド
-  - 対象: `src/presentation/InputController.ts`。要点: canvas クリックの client 座標を canvas 内座標へ補正し
-    `pixelToHex(px,py,size,origin)`→対象 hex。対象に敵がいて自選択ユニットに隣接なら `AttackUnit`、
-    隣接 passable なら `MoveUnit`、それ以外は無視。キーボード（隣接移動・`E`=EndTurn）を補助。
-    「現在操作中の自ユニット」の選択方法（クリック選択 or 既定でプレイヤー本体）は本タスクで**プレイヤー本体を
-    既定選択**とし、ロボット操作の選択 UI は Phase 5 で拡張する旨を明記。
-  - テスト: pixel→hex 変換の妥当性はユニット、操作系は E2E。
-- [ ] **`Hud`** — 状態表示
-  - 対象: `src/presentation/Hud.ts`。`#hud` にターン数・プレイヤーHP・資源在庫・`status`・操作ヒントを描画。
-  - 完了: `render(state)` で DOM テキストが更新される。
-- [ ] **`main.ts` 統合** — 起動と配線
-  - 対象: `src/main.ts`。要点: `?seed=` を読み（無ければ `Date.now()` 由来の固定化値か既定 seed）、
-    `GameService.newGame(seed)`、`subscribe` で再描画（イベント受信→`getState`→`render`）、入力を接続。
-    **`?seed=` 指定で固定マップを決定的に再現**できること（E2E 安定化、`tbd.md G-10`）。
-  - 完了: ブラウザで移動→霧が晴れ→ゴールで勝利表示／敗北表示まで手動で通る。
-- [ ] **手動 MVP ループ確認** — Phase 2/3 完成前提。移動→霧→ゴール勝利／死亡敗北を手で確認。
+- [ ] **手動 MVP ループ確認** — 移動→霧→ゴール勝利／死亡敗北を手で確認（G-02 反映後の挙動で確認するのが望ましい）。
+  - 2026-06-21: `web` コンテナ（`http://localhost:8080`）でマウス操作により移動→**ゴール到達=勝利**まで確認済み（指示者）。
+    未確認は敗北（死亡／ポッド破壊）経路と、G-02 反映後・予見可能性（プレビュー/Undo）反映後の挙動。
 
 ## Phase 5: ロボット/資源の最小スライス
 
@@ -230,9 +75,9 @@
     emit `ResourceGathered`。`rule.md §7`。
   - テスト: 採取で在庫加算・タイル枯渇・資源なしで拒否・採取後そのユニットは行動終了。
 - [ ] **`BuildRobot` ハンドラ** — pod 上のプレイヤー本体のみ
-  - ⚠ **前提確認**: 建造ルールは `tbd.md G-02` の暫定確定線（ポッド固定拠点・建造は pod 上のプレイヤー本体のみ）に
-    依存する。Phase 5 着手前に G-02 が指示者により別案へ変更されていないか確認すること（変われば本タスクを停止・再設計）。
-  - 要点（`rule.md §7`・G-02 暫定確定線）: プレイヤー本体が `feature==='pod'` タイル上か否（否なら
+  - ✅ **前提確定**: 建造ルールは `decisions.md` D-12（ポッドは固定建造物・建造は pod 上のプレイヤー本体のみ）で確定。
+    「pod 上か」の判定は **プレイヤー本体の `coord` が `GameState.pod.coord` と一致するか**で行う（feature タイルではなく pod 構造体で判定）。
+  - 要点（`rule.md §7`・D-12）: プレイヤー本体が pod タイル上か否（否なら
     `not-on-pod`）→`inventory.resource>=SCOUT_COST` 否なら `insufficient-resource`→`HEX_DIRECTIONS` 順で
     最初の passable・在界・空き（`occupantAt` で判定）タイルに `createScout` を配置。生成 scout の id は
     `r0,r1,...`（既存ロボット数で採番）、当ターンは `movementLeft=0`・`hasActed=true`→
@@ -254,14 +99,19 @@
   - 要点: `?seed=<固定>` で起動→既知の連続クリックで移動→ゴール到達で勝利表示を assert。固定マップ前提。
 - [ ] **カバレッジ80%確認** — `npm run test:cov` が domain/application include で80%以上（D-10）。
 
-## Phase 7: Docker Compose / デプロイ確認
+## Phase 7: Docker Compose / デプロイ確認（D-07: 可能なら前倒し）
 
-- [ ] **`Dockerfile`（ビルド用）** — Node でビルドし `dist/` を生成（multi-stage 可）。
-- [ ] **`docker-compose.yml`** — `dev`=Vite(HMR) / `web`=`httpd:2.4` で `dist/` を docroot 配信、profiles 切替（D-07）。
-- [ ] **`dev` 起動確認** — `docker compose --profile dev up` で開発サーバが動く。
-- [ ] **`web` 配信確認** — ビルド成果物を Apache で配信し本番相当で通しプレイ。`design.md §14.2` の
+- [x] **`Dockerfile`（ビルド用）** — Node でビルドし `dist/` を生成（multi-stage 可）。
+- [x] **`docker-compose.yml`** — `dev`=Vite(HMR) / `web`=`httpd:2.4` で `dist/` を docroot 配信、profiles 切替（D-07）。
+- [x] **`dev` 起動確認** — `docker compose --profile dev up` で開発サーバが動く。
+  - 2026-06-21: `docker compose --profile dev up --build -d dev` で起動し、`http://localhost:5173/`・
+    `/src/main.ts`・`/@vite/client` の HTTP 応答を確認。HMR クライアント配信は確認済み。ファイル一時変更による
+    ブラウザ HMR 目視確認は未実施。
+- [x] **`web` 配信確認** — ビルド成果物を Apache で配信し本番相当で通しプレイ。`design.md §14.2` の
   SPA フォールバック不要・`mod_rewrite` 既定無効の注意を `deploy/` に記録。
-- [ ] **`deploy/`** — Apache 設定例・配置手順（docroot・`base` 整合）。
+  - 2026-06-21: `docker compose --profile web up --build -d web` で起動し、`http://localhost:8080/` と
+    `http://localhost:8080/?seed=manual-web-check`、ビルド済み JS アセットの HTTP 200 を確認。ブラウザでの通しプレイは未実施。
+- [x] **`deploy/`** — Apache 設定例・配置手順（docroot・`base` 整合）。
 
 ## Phase 8: ドキュメント整備（consolidate）
 
@@ -269,3 +119,83 @@
 - [ ] **`docs/rule.md` 更新** — 実装で確定した数値・挙動に合わせる（`types-reference §5` と同期）。
 - [ ] **`design.md` 更新** — 実装と突き合わせ（consolidate）。`hex-reference`/`types-reference` との乖離も解消。
 - [ ] **`tbd.md` 更新** — 実装で判明した論点を反映。
+
+---
+
+## G-02 反映タスク: ポッド/敗北モデルの実装更新（design タスク `20260621_008`・最優先）
+
+`decisions.md` D-12 確定に伴い、既完了の Phase 1〜3 の一部をモデル変更へ追従させる。可動ユニット（units）と
+固定建造物（pod）を分離し、敗北条件に「ポッド破壊」を追加する。**型・定数は `types-reference §1,§2,§5,§6` に追加済み**
+（`PodStructure` / `GameState.pod` / `POD_HP=20` / `POD_DEFENSE=0`）。早期停止ポリシー: 既存実装と矛盾を感じたら停止して報告。
+
+- [x] **`GameState.pod` の導入と `newGame` 構築** — `src/application/GameService.ts`・`state.ts`
+  - 要点: `GameState` に `pod: PodStructure` を追加。`newGame` は `MapGenerator` の `podCoord` から
+    `{ id:'pod', coord:podCoord, hp:POD_HP, maxHp:POD_HP, defense:POD_DEFENSE }` を構築して格納。`pod` は `units` に入れない。
+    プレイヤー本体は従来どおり pod 上（または近傍）に配置（既存の中心/pod 配置を踏襲）。`getState` のスナップショットにも含める。
+  - テスト: `tests/unit/gameService.test.ts`。`newGame` 後 `state.pod` が `POD_HP`・`podCoord` と一致。
+- [x] **敗北判定にポッド破壊を追加** — `src/domain/rules/victory.ts`
+  - 要点: `evaluateStatus({ goalReached, playerAlive, podAlive })` に**第3入力 `podAlive` を追加**。
+    `goalReached`→`'won'`（勝利優先）/ `(!playerAlive || !podAlive)`→`'lost'` / 他は `'playing'`（`rule.md §4.1`）。
+  - 影響: 呼び出し側（`turnEngine`・`GameService` の勝敗評価）は `podAlive = state.pod.hp > 0` を渡すよう更新。
+  - テスト: `tests/unit/victory.test.ts` に「ポッド破壊で lost」「ゴール到達はポッド破壊より優先で won」を追加。既存テストは `podAlive:true` 補完。
+- [x] **重なり時の被弾はポッドへ** — `src/application/turn/turnEngine.ts`（敵相のダメージ適用箇所）
+  - 要点: 敵がプレイヤー本体を攻撃する際、**プレイヤーが pod に重なっている（`player.coord` == `pod.coord`）なら
+    ダメージは `pod.hp` に入れる**（プレイヤーHPは減らさない）。pod.hp が 0 になったら敗北判定対象。
+    重なっていなければ従来どおりプレイヤーHPへ。`CombatResolved` の `targetId` は被弾対象（`'pod'` or player id）を反映。
+  - テスト: `tests/unit/turnEngine.test.ts`。pod 上のプレイヤーが攻撃されると pod.hp が減りプレイヤーHPは不変／pod 0 で lost。
+- [x] **敵の攻撃/接近対象にポッドを含め優先度を適用** — `src/application/turn/enemyAi.ts`
+  - 要点: 敵の対象候補に**プレイヤー（可動）とポッド（pod.coord）**を含める。同条件で複数狙えるときの優先は
+    **プレイヤー > ポッド > ロボット**（`rule.md §6`）。接近対象は従来どおり**視界内**に限定、視界内に対象なしなら待機。
+    タイブレークは距離→優先度→`HEX_DIRECTIONS` index 順。`occupantAt`（可動のみ）に pod を混ぜない（移動は pod 上にも乗れる）。
+  - テスト: `tests/unit/enemyAi.test.ts`。プレイヤーとポッドが同距離ならプレイヤーを狙う／プレイヤー不在ならポッドへ接近・攻撃。
+- [x] **描画/HUD のポッド対応** — `src/presentation/CanvasRenderer.ts`・`Hud.ts`
+  - 要点: ポッドを固定建造物として描画（feature 'pod' は既存）。HUD に**ポッドHP**を表示（プレイヤーHPと並記）。
+    敗北表示はプレイヤー死亡・ポッド破壊の双方で出ること。E2E（Phase 6）で担保。
+  - テスト: ロジックは薄いので E2E。任意で Hud のユニットテスト。
+
+---
+
+## 予見可能性タスク: アンドゥと敵相プレビュー（MVP最終目標・`decisions.md` D-16）
+
+決定的予見可能ポリシー（D-13・`rule.md §7.2`）を操作面で実現する。「行動を確定する前に、そのターンの敵の行動と
+結果まで予見でき、修正（アンドゥ）できる」状態を MVP 最終時点で満たす。実装順は下記（試算分離 → アンドゥ → UI）。
+
+- [x] **敵相を「試算（純）」と「適用（emit あり）」に分離** — `src/application/turn/turnEngine.ts`
+  - 要点: 現行 `runEnemyPhaseAndAdvance(state, emit)` の行動決定ロジックを、**副作用なし・emit なしで予測を返す純関数**
+    `simulateEnemyPhase(state): EnemyPhasePrediction` として抽出する（clone した state 上で敵AI/ターンエンジンを走らせる）。
+    `EnemyPhasePrediction` は各敵の移動先・攻撃対象・被ダメ（プレイヤー/ポッド/ロボット別）を含む。適用版は試算結果を使って
+    state 更新＋emit する形に整理し、**試算と適用で結果が一致**することを担保する（決定性 D-06/D-11）。
+  - テスト: `tests/unit/turnEngine.test.ts`。`simulateEnemyPhase` の予測が、実際に適用した後の state 差分と一致する。
+- [x] **`GameService.undo()` 追加（プレイヤー相内スナップショットスタック）** — `src/application/GameService.ts`
+  - 要点: プレイヤー相のコマンド適用直前に `structuredClone(state)` をスタックへ push。`undo()` は pop して直前状態へ戻し、
+    戻せたら `true`。EndTurn 適用（敵相開始）でスタックを**クリア**（アンドゥはそのターンのプレイヤー相内に限る・D-16）。
+    `getState()` のスナップショットと整合させる。Command 体系は増やさない（UI 操作）。
+  - テスト: `tests/unit/gameService.test.ts`。移動→`undo()` で座標・移動力が直前へ復帰／EndTurn 後はスタック空で `undo()` が `false`。
+- [x] **`GameService.previewEnemyPhase()` 公開** — `src/application/GameService.ts`
+  - 要点: 現在の `state` から `simulateEnemyPhase` を呼び、`EnemyPhasePrediction` を返す（state は変更しない）。
+  - テスト: 同一 state で複数回呼んでも同結果（純粋・決定的）。
+- [x] **UI: 敵相プレビュー描画と Undo 操作** — `src/presentation/CanvasRenderer.ts`・`InputController.ts`・`Hud.ts`
+  - 要点: プレイヤーの暫定移動／アンドゥのたびに `previewEnemyPhase()` を再取得し、敵の移動先（ゴースト）・被ダメ予測を薄く重畳描画。
+    Undo はキー（例: `U`）かボタンで `undo()` を呼び再描画。表示粒度は実装時に調整（D-16）。
+  - テスト: E2E（Phase 6）で「移動→敵プレビュー表示→Undo で戻る→別行動」を確認。任意で描画ロジックの軽いユニットテスト。
+
+---
+
+## レビュー指摘（Phase 2 / タスク `20260621_005`）
+
+`logs/20260621_005_review_phase2.result.md` 参照。重大度順。解決済みの項目は削除済み。
+
+- [x] **[必須] `AttackUnit` のフレンドリーファイア防止** — `src/application/GameService.ts:137-144`
+  - 問題: 対象 id が**自軍ユニット（player/robot）でも攻撃が成立**する。`unitTarget` を `state.units.find(id===targetId)`
+    で取るだけで `isPlayerSide` 判定がなく、隣接する自分の `scout` 等を攻撃できてしまう（`rule.md §6`「敵を攻撃する」に反する）。
+    `target-not-enemy` という拒否理由が用意済みなのに、現状は「対象が存在しない」場合にしか使われていない。
+  - 現状の影響: `newGame` の自ユニットは `player` 1体のみ・自分自身は距離0で `target-not-adjacent` 拒否されるため**今は顕在化しない**が、
+    **Phase 5 でロボットが増えた瞬間に live になる**。Phase 5 着手前までに修正すること。
+  - 修正案: `unitTarget` が見つかった場合に `isPlayerSide(unitTarget)` なら `{ ok:false, reason:'target-not-enemy' }`。
+    自分自身（`targetId===attackerId`）も同拒否でよい。`nestTarget` は従来どおり攻撃可（任意破壊）。
+  - テスト追加: `tests/unit/gameService.test.ts` に「隣接する自軍ユニットへの `AttackUnit` が `target-not-enemy` で拒否」ケース。
+- [ ] **[軽微] 二桁以上の id でのソート順** — `src/application/turn/turnEngine.ts:20`（`.sort()`）/ `src/application/util.ts`（`minBy`）
+  - 文字列辞書順のため、敵が10体以上になると `e10 < e2` となり「id 昇順=数値順」の意図とずれる。`ENEMY_COUNT=5`（`types-reference §5`）
+    の現状は問題なし（`types-reference §6` も桁が揃う前提を明記）。将来 `ENEMY_COUNT` を二桁以上に上げる際は**ゼロ埋め採番**等で対処すること。
+- [ ] **[軽微/好み] `dispatch` の到達不能 default** — `src/application/GameService.ts:88` `return cmd;`
+  - exhaustive 後の `never` を返す形。型は通るが意味が曖昧。`assertNever(cmd)` か `{ ok:false, ... }` の方が意図が明確。

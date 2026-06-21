@@ -53,6 +53,15 @@ export type Unit = {
 };
 
 export type Nest = { id: string; coord: Hex; hp: number; maxHp: number };
+
+// domain/units/types.ts — 固定建造物（脱出ポッド）。可動ユニットが重なれる・破壊され得る（D-12）
+export type PodStructure = {
+  id: string;          // 例: 'pod'
+  coord: Hex;          // 開始タイル（マップ生成の podCoord）
+  hp: number;
+  maxHp: number;
+  defense: number;     // MVP は確定ダメージのため 0（未使用）
+};
 ```
 
 ---
@@ -66,7 +75,8 @@ export type Phase = 'player' | 'enemy';
 
 export type GameState = {
   map: GameMap;
-  units: Unit[];                 // player / robots / enemies を id 一意で混在保持
+  units: Unit[];                 // 可動ユニット: player / robots / enemies を id 一意で混在保持（占有判定の対象）
+  pod: PodStructure;             // 固定建造物: 開始拠点。破壊で敗北（D-12）。占有判定には含めない
   nests: Nest[];
   inventory: { resource: number };
   turn: number;                  // 1 始まり
@@ -157,6 +167,8 @@ export const UNIT_STATS = {
 export const GATHER_AMOUNT = 5;       // 1回の採取で在庫 +5
 export const SCOUT_COST = 10;         // scout 建造コスト
 export const NEST_HP = 8;             // 巣の耐久（任意破壊・暫定）
+export const POD_HP = 20;             // 脱出ポッドの耐久（破壊で敗北・暫定／rule.md §7.1）
+export const POD_DEFENSE = 0;         // MVP は確定ダメージのため未使用
 
 // infrastructure/mapgen
 export const MAP_RADIUS = 7;          // R（rule.md は 6〜8、MVP既定値）
@@ -200,6 +212,8 @@ export type GenResult = {
   enemies: Unit[];   // 生成された敵（id は決定的に採番、例: `e0`,`e1`,...）
   nests: Nest[];     // 巣（id 例: `n0`,`n1`,...）
 };
+//   GameService.newGame は podCoord から PodStructure（id:'pod', hp/maxHp:POD_HP, defense:POD_DEFENSE）を構築して
+//   GameState.pod に格納する（D-12）。pod は units には入れない。
 ```
 
 - **敵死亡時の状態更新の規約**: ユニット除去は `state.units = state.units.filter(u => u.id !== id)`（新配列）で行う。
