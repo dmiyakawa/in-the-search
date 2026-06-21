@@ -2,9 +2,18 @@ import { hexToPixel, type Point } from '../domain/hex';
 import type { Tile } from '../domain/map';
 import type { GameState } from '../application/state';
 import type { EnemyPhasePrediction } from '../application/turn/turnEngine';
+import type { Hex } from '../domain/hex';
 import type { Selection } from './selection';
 
 export type View = { size: number; origin: Point };
+export type AttackIndicator = {
+  attackerId: string;
+  targetId: string;
+  from: Hex;
+  to: Hex;
+  damage: number;
+  side: 'player' | 'enemy';
+};
 
 const tileColors: Record<Tile['visibility'], string> = {
   unknown: '#101418',
@@ -51,6 +60,103 @@ const drawToken = (
   ctx.stroke();
 };
 
+const drawDamageText = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  fill: string
+): void => {
+  const metrics = ctx.measureText(text);
+  const paddingX = 4;
+  const paddingY = 2;
+  const height = 14;
+  ctx.fillStyle = 'rgba(8, 10, 10, 0.78)';
+  ctx.fillRect(
+    x - metrics.width / 2 - paddingX,
+    y - height / 2,
+    metrics.width + paddingX * 2,
+    height
+  );
+  ctx.fillStyle = fill;
+  ctx.fillText(text, x, y + paddingY);
+};
+
+const drawArrowHead = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  angle: number,
+  size: number
+): void => {
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x - size * Math.cos(angle - Math.PI / 6), y - size * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(x - size * Math.cos(angle + Math.PI / 6), y - size * Math.sin(angle + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+};
+
+const drawAttackIndicator = (
+  ctx: CanvasRenderingContext2D,
+  indicator: AttackIndicator,
+  view: View,
+  lane: number
+): void => {
+  const from = hexToPixel(indicator.from, view.size, view.origin);
+  const to = hexToPixel(indicator.to, view.size, view.origin);
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+  if (length <= 0) return;
+
+  const ux = dx / length;
+  const uy = dy / length;
+  const nx = -uy;
+  const ny = ux;
+  const offset = lane * view.size * 0.2;
+  const start = {
+    x: from.x + ux * view.size * 0.42 + nx * offset,
+    y: from.y + uy * view.size * 0.42 + ny * offset,
+  };
+  const end = {
+    x: to.x - ux * view.size * 0.42 + nx * offset,
+    y: to.y - uy * view.size * 0.42 + ny * offset,
+  };
+  const color = indicator.side === 'player' ? '#8ce99a' : '#ffb36b';
+
+  ctx.save();
+  ctx.globalAlpha = indicator.side === 'player' ? 0.9 : 0.7;
+  ctx.lineWidth = Math.max(2, view.size * 0.08);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+  drawArrowHead(ctx, end.x, end.y, Math.atan2(dy, dx), Math.max(7, view.size * 0.28));
+
+  ctx.font = `${Math.max(10, Math.round(view.size * 0.34))}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  drawDamageText(
+    ctx,
+    `-${indicator.damage}`,
+    (start.x + end.x) / 2 + nx * view.size * 0.18,
+    (start.y + end.y) / 2 + ny * view.size * 0.18,
+    color
+  );
+  ctx.restore();
+};
+
+const targetCoord = (state: GameState, targetId: string): Hex | undefined => {
+  if (targetId === state.pod.id) return state.pod.coord;
+  return (
+    state.units.find((unit) => unit.id === targetId)?.coord ??
+    state.nests.find((nest) => nest.id === targetId)?.coord
+  );
+};
+
 const drawPreview = (
   ctx: CanvasRenderingContext2D,
   state: GameState,
@@ -66,6 +172,21 @@ const drawPreview = (
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
+  const enemyPositions = new Map(
+    state.units.filter((unit) => unit.kind === 'enemy').map((unit) => [unit.id, unit.coord])
+  );
+  const attackCounts = new Map<string, { count: number; damage: number }>();
+
+  for (const action of prediction.actions) {
+    if (action.kind === 'attack') {
+      const current = attackCounts.get(action.targetId) ?? { count: 0, damage: 0 };
+      attackCounts.set(action.targetId, {
+        count: current.count + 1,
+        damage: current.damage + action.damage,
+      });
+    }
+  }
+
   for (const action of prediction.actions) {
     if (action.kind === 'move') {
       const from = hexToPixel(action.from, view.size, view.origin);
@@ -75,18 +196,33 @@ const drawPreview = (
       ctx.lineTo(to.x, to.y);
       ctx.stroke();
       drawToken(ctx, to, view.size * 0.28, '#ffb36b', '#5b2d12');
+      enemyPositions.set(action.enemyId, action.to);
     } else if (action.kind === 'attack') {
-      const target =
-        action.targetId === state.pod.id
-          ? state.pod
-          : state.units.find((unit) => unit.id === action.targetId);
-      if (!target) continue;
-      const center = hexToPixel(target.coord, view.size, view.origin);
-      ctx.beginPath();
-      ctx.arc(center.x, center.y, view.size * 0.48, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillText(`-${action.damage}`, center.x, center.y - view.size * 0.62);
+      const from = enemyPositions.get(action.enemyId);
+      const to = targetCoord(state, action.targetId);
+      if (!from || !to) continue;
+      drawAttackIndicator(
+        ctx,
+        {
+          attackerId: action.enemyId,
+          targetId: action.targetId,
+          from,
+          to,
+          damage: action.damage,
+          side: 'enemy',
+        },
+        view,
+        1
+      );
     }
+  }
+
+  for (const [targetId, attack] of attackCounts) {
+    if (attack.count <= 1) continue;
+    const coord = targetCoord(state, targetId);
+    if (!coord) continue;
+    const center = hexToPixel(coord, view.size, view.origin);
+    drawDamageText(ctx, `-${attack.damage}`, center.x, center.y - view.size * 0.72, '#ffb36b');
   }
 
   ctx.restore();
@@ -97,7 +233,8 @@ export const render = (
   state: GameState,
   view: View,
   prediction?: EnemyPhasePrediction,
-  selection?: Selection
+  selection?: Selection,
+  playerAttack?: AttackIndicator
 ): void => {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -142,6 +279,10 @@ export const render = (
 
   if (prediction && state.status === 'playing') {
     drawPreview(ctx, state, prediction, view);
+  }
+
+  if (playerAttack && state.status === 'playing') {
+    drawAttackIndicator(ctx, playerAttack, view, -1);
   }
 
   for (const unit of state.units) {

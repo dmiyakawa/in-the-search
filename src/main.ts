@@ -3,7 +3,7 @@ import type { GameState } from './application/state';
 import { createEnemy, createPlayer, isPlayerSide, POD_DEFENSE, POD_HP } from './domain/units';
 import { createEmptyMap, getTile, setTile } from './domain/map';
 import { updateVisibility } from './domain/rules/fog';
-import { render, type View } from './presentation/CanvasRenderer';
+import { render, type AttackIndicator, type View } from './presentation/CanvasRenderer';
 import { createInputController } from './presentation/InputController';
 import { renderHud, type HudActions } from './presentation/Hud';
 import { renderUnitList } from './presentation/UnitListPanel';
@@ -111,6 +111,7 @@ if (!ctx) {
 const service = new GameService(createInitialState());
 let view: View = { size: 32, origin: { x: 0, y: 0 } };
 let selection: Selection = { kind: 'own', id: 'player' };
+let lastPlayerAttack: AttackIndicator | undefined;
 
 const normalizeSelection = (): Selection => {
   const state = service.getState();
@@ -164,26 +165,43 @@ const resize = (): void => {
   const prediction = state.status === 'playing' ? service.previewEnemyPhase() : undefined;
   const currentSelection = normalizeSelection();
   const ownId = selectedOwnId(currentSelection);
-  render(ctx, state, view, prediction, currentSelection);
+  render(ctx, state, view, prediction, currentSelection, lastPlayerAttack);
   renderHud(hud, state, prediction, ownId, computeHudActions(ownId));
   renderUnitList(unitPanel, state, prediction, currentSelection, computeHudActions);
   renderEnemyList(enemyPanel, state, currentSelection);
-  renderActionMenu(actionMenu, service, state, view, currentSelection, redraw);
+  renderActionMenu(actionMenu, service, state, view, currentSelection, redraw, (indicator) => {
+    lastPlayerAttack = indicator;
+  });
 };
 
 const redraw = (): void => {
   const state = service.getState();
+  if (state.phase !== 'player' || state.status !== 'playing') lastPlayerAttack = undefined;
   const prediction = state.status === 'playing' ? service.previewEnemyPhase() : undefined;
   const currentSelection = normalizeSelection();
   const ownId = selectedOwnId(currentSelection);
-  render(ctx, state, view, prediction, currentSelection);
+  render(ctx, state, view, prediction, currentSelection, lastPlayerAttack);
   renderHud(hud, state, prediction, ownId, computeHudActions(ownId));
   renderUnitList(unitPanel, state, prediction, currentSelection, computeHudActions);
   renderEnemyList(enemyPanel, state, currentSelection);
-  renderActionMenu(actionMenu, service, state, view, currentSelection, redraw);
+  renderActionMenu(actionMenu, service, state, view, currentSelection, redraw, (indicator) => {
+    lastPlayerAttack = indicator;
+  });
 };
 
-service.subscribe(redraw);
+service.subscribe((event) => {
+  if (
+    event.type === 'TurnAdvanced' ||
+    event.type === 'UnitMoved' ||
+    event.type === 'ResourceGathered' ||
+    event.type === 'RobotBuilt' ||
+    event.type === 'GameWon' ||
+    event.type === 'GameLost'
+  ) {
+    lastPlayerAttack = undefined;
+  }
+  redraw();
+});
 createInputController(
   canvas,
   service,
@@ -192,6 +210,9 @@ createInputController(
   () => selection,
   (nextSelection) => {
     selection = nextSelection;
+  },
+  (indicator) => {
+    lastPlayerAttack = indicator;
   }
 );
 unitPanel.addEventListener('click', (event) => {

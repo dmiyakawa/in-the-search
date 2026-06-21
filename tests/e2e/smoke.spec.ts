@@ -4,6 +4,7 @@ type TestHook = {
   getView: () => { size: number; origin: { x: number; y: number } };
   getState: () => {
     inventory: { resource: number };
+    units: Array<{ id: string; hp: number }>;
   };
 };
 
@@ -68,4 +69,25 @@ test('mouse selection panels and action menu expose unit context', async ({ page
 
   await canvas.click({ position: point({ q: 1, r: -1 }) });
   await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).toHaveClass(/selected/);
+});
+
+test('clicking an attackable enemy attacks instead of selecting it', async ({ page }) => {
+  await page.goto('/?__scenario=ui&__test=1');
+  const canvas = page.locator('canvas#game');
+  const view = await page.evaluate(() =>
+    (window as unknown as { __ITS_TEST__: TestHook }).__ITS_TEST__.getView()
+  );
+  const point = (hex: { q: number; r: number }) => hexToPixel(hex, view.size, view.origin);
+
+  await canvas.click({ position: point({ q: 1, r: -1 }) });
+
+  const enemyHp = await page.evaluate(
+    () =>
+      (window as unknown as { __ITS_TEST__: TestHook }).__ITS_TEST__
+        .getState()
+        .units.find((unit) => unit.id === 'e0')?.hp
+  );
+  expect(enemyHp).toBe(2);
+  await expect(page.locator('#enemy-panel [data-enemy-id="e0"]')).not.toHaveClass(/selected/);
+  await expect(page.locator('#unit-panel [data-unit-id="player"]')).toHaveClass(/selected/);
 });

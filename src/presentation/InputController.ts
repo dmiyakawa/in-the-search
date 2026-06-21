@@ -2,7 +2,7 @@ import { add, distance, HEX_DIRECTIONS, pixelToHex, type Hex } from '../domain/h
 import { getTile } from '../domain/map';
 import { isPlayerSide } from '../domain/units';
 import type { GameService } from '../application/GameService';
-import type { View } from './CanvasRenderer';
+import type { AttackIndicator, View } from './CanvasRenderer';
 import type { Selection } from './selection';
 
 export type InputController = { destroy(): void };
@@ -54,14 +54,30 @@ const currentPlayerSideUnitId = (
   return state.units.find(isPlayerSide)?.id;
 };
 
-const dispatchForTarget = (service: GameService, selectedUnitId: string, target: Hex): boolean => {
+const dispatchForTarget = (
+  service: GameService,
+  selectedUnitId: string,
+  target: Hex,
+  onPlayerAttack?: (indicator: AttackIndicator) => void
+): boolean => {
   const state = service.getState();
   const unit = state.units.find((u) => u.id === selectedUnitId && isPlayerSide(u));
   if (!unit || state.status !== 'playing') return false;
 
   const targetId = findVisibleTargetId(service, target);
   if (targetId && distance(unit.coord, target) === 1) {
-    return service.dispatch({ type: 'AttackUnit', attackerId: unit.id, targetId }).ok;
+    const result = service.dispatch({ type: 'AttackUnit', attackerId: unit.id, targetId });
+    if (result.ok) {
+      onPlayerAttack?.({
+        attackerId: unit.id,
+        targetId,
+        from: unit.coord,
+        to: target,
+        damage: unit.attack,
+        side: 'player',
+      });
+    }
+    return result.ok;
   }
 
   const tile = getTile(state.map, target);
@@ -77,7 +93,8 @@ export const createInputController = (
   getView: () => View,
   onChanged?: () => void,
   getSelection: () => Selection = () => ({ kind: 'own', id: 'player' }),
-  setSelection: (selection: Selection) => void = () => undefined
+  setSelection: (selection: Selection) => void = () => undefined,
+  onPlayerAttack?: (indicator: AttackIndicator) => void
 ): InputController => {
   const onClick = (event: MouseEvent): void => {
     const point = canvasPoint(canvas, event);
@@ -90,6 +107,14 @@ export const createInputController = (
       return;
     }
 
+    const selection = getSelection();
+    const selectedUnitId =
+      selection.kind === 'own' ? currentPlayerSideUnitId(service, selection) : undefined;
+    if (selectedUnitId && dispatchForTarget(service, selectedUnitId, target, onPlayerAttack)) {
+      onChanged?.();
+      return;
+    }
+
     const selectedEnemy = findVisibleEnemyId(service, target);
     if (selectedEnemy) {
       setSelection({ kind: 'enemy', id: selectedEnemy });
@@ -97,19 +122,13 @@ export const createInputController = (
       return;
     }
 
-    const selection = getSelection();
-    const selectedUnitId =
-      selection.kind === 'own' ? currentPlayerSideUnitId(service, selection) : undefined;
     if (!selectedUnitId) {
       setSelection({ kind: 'none' });
       onChanged?.();
       return;
     }
 
-    const dispatched = dispatchForTarget(service, selectedUnitId, target);
-    if (!dispatched) {
-      setSelection({ kind: 'none' });
-    }
+    setSelection({ kind: 'none' });
     onChanged?.();
   };
 
@@ -163,7 +182,7 @@ export const createInputController = (
     const direction = HEX_DIRECTIONS[dirIndex];
     if (!unit || !direction) return;
     event.preventDefault();
-    dispatchForTarget(service, selectedUnitId, add(unit.coord, direction));
+    dispatchForTarget(service, selectedUnitId, add(unit.coord, direction), onPlayerAttack);
   };
 
   canvas.addEventListener('click', onClick);

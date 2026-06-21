@@ -3,7 +3,7 @@ import { getTile } from '../domain/map';
 import { isPlayerSide } from '../domain/units';
 import type { GameService } from '../application/GameService';
 import type { GameState } from '../application/state';
-import type { View } from './CanvasRenderer';
+import type { AttackIndicator, View } from './CanvasRenderer';
 import type { Selection } from './selection';
 
 type MenuItem = {
@@ -27,13 +27,18 @@ const firstAdjacentTargetId = (state: GameState, unitId: string): string | undef
   })?.id;
 };
 
+const targetCoord = (state: GameState, targetId: string) =>
+  state.units.find((target) => target.id === targetId)?.coord ??
+  state.nests.find((target) => target.id === targetId)?.coord;
+
 export const renderActionMenu = (
   root: HTMLElement,
   service: GameService,
   state: GameState,
   view: View,
   selection: Selection,
-  onChanged: () => void
+  onChanged: () => void,
+  onPlayerAttack?: (indicator: AttackIndicator) => void
 ): void => {
   root.replaceChildren();
   root.hidden = true;
@@ -67,7 +72,19 @@ export const renderActionMenu = (
       enabled: true,
       action: () => {
         const targetId = firstAdjacentTargetId(state, unit.id);
-        if (targetId) service.dispatch({ type: 'AttackUnit', attackerId: unit.id, targetId });
+        const to = targetId ? targetCoord(state, targetId) : undefined;
+        if (!targetId || !to) return;
+        const result = service.dispatch({ type: 'AttackUnit', attackerId: unit.id, targetId });
+        if (result.ok) {
+          onPlayerAttack?.({
+            attackerId: unit.id,
+            targetId,
+            from: unit.coord,
+            to,
+            damage: unit.attack,
+            side: 'player',
+          });
+        }
       },
     });
   }
