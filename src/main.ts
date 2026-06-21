@@ -25,6 +25,15 @@ if (!ctx) {
 
 const service = new GameService(GameService.newGame(readSeed()));
 let view: View = { size: 32, origin: { x: 0, y: 0 } };
+let selectedUnitId = 'player';
+
+const normalizeSelectedUnit = (): string => {
+  const state = service.getState();
+  const selected = state.units.find((unit) => unit.id === selectedUnitId && unit.kind !== 'enemy');
+  if (selected) return selectedUnitId;
+  selectedUnitId = state.units.find((unit) => unit.kind !== 'enemy')?.id ?? 'player';
+  return selectedUnitId;
+};
 
 const resize = (): void => {
   const ratio = window.devicePixelRatio || 1;
@@ -47,18 +56,29 @@ const resize = (): void => {
     },
   };
   const prediction = state.status === 'playing' ? service.previewEnemyPhase() : undefined;
-  render(ctx, state, view, prediction);
-  renderHud(hud, state, prediction);
+  const selected = normalizeSelectedUnit();
+  render(ctx, state, view, prediction, selected);
+  renderHud(hud, state, prediction, selected);
 };
 
 const redraw = (): void => {
   const state = service.getState();
   const prediction = state.status === 'playing' ? service.previewEnemyPhase() : undefined;
-  render(ctx, state, view, prediction);
-  renderHud(hud, state, prediction);
+  const selected = normalizeSelectedUnit();
+  render(ctx, state, view, prediction, selected);
+  renderHud(hud, state, prediction, selected);
 };
 
 service.subscribe(redraw);
-createInputController(canvas, service, () => view, redraw);
+createInputController(
+  canvas,
+  service,
+  () => view,
+  redraw,
+  () => selectedUnitId,
+  (unitId) => {
+    selectedUnitId = unitId;
+  }
+);
 window.addEventListener('resize', resize);
 resize();

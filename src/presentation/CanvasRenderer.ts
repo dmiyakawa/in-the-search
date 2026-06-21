@@ -95,7 +95,8 @@ export const render = (
   ctx: CanvasRenderingContext2D,
   state: GameState,
   view: View,
-  prediction?: EnemyPhasePrediction
+  prediction?: EnemyPhasePrediction,
+  selectedUnitId?: string
 ): void => {
   const { canvas } = ctx;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -149,6 +150,13 @@ export const render = (
     const center = hexToPixel(unit.coord, view.size, view.origin);
     const fill = unit.kind === 'player' ? '#e9f1ff' : unit.kind === 'robot' ? '#63d2ff' : '#e05a47';
     drawToken(ctx, center, view.size * 0.36, fill);
+    if (unit.id === selectedUnitId) {
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, view.size * 0.52, 0, Math.PI * 2);
+      ctx.lineWidth = Math.max(2, view.size * 0.08);
+      ctx.strokeStyle = '#f4d35e';
+      ctx.stroke();
+    }
 
     ctx.fillStyle = '#111';
     ctx.font = `${Math.max(10, Math.round(view.size * 0.42))}px sans-serif`;

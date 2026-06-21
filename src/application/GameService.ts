@@ -1,10 +1,17 @@
-import type { Hex } from '../domain/hex';
-import { getTile } from '../domain/map';
+import { HEX_DIRECTIONS, add, distance, equals, type Hex } from '../domain/hex';
+import { getTile, inBounds, setTile } from '../domain/map';
 import { checkMove } from '../domain/rules/movement';
 import { resolveAttack } from '../domain/rules/combat';
 import { updateVisibility } from '../domain/rules/fog';
-import { distance } from '../domain/hex';
-import { createPlayer, isPlayerSide, POD_DEFENSE, POD_HP } from '../domain/units';
+import {
+  createPlayer,
+  createScout,
+  GATHER_AMOUNT,
+  isPlayerSide,
+  POD_DEFENSE,
+  POD_HP,
+  SCOUT_COST,
+} from '../domain/units';
 import { generateMapWithRngState } from '../infrastructure/mapgen/MapGenerator';
 import type { Command, CommandResult } from './commands';
 import type { DomainEvent } from './events';
@@ -98,11 +105,9 @@ export class GameService {
       case 'EndTurn':
         return this.handleEndTurn();
       case 'GatherResource':
-        // Reserved for Phase 5.
-        return { ok: true };
+        return this.handleGatherResource(cmd.unitId);
       case 'BuildRobot':
-        // Reserved for Phase 5.
-        return { ok: true };
+        return this.handleBuildRobot(cmd.robotKind);
       default:
         return cmd;
     }
@@ -185,6 +190,73 @@ export class GameService {
       targetHpAfter: result.targetHpAfter,
       targetDestroyed: result.destroyed,
     });
+
+    return { ok: true };
+  }
+
+  private handleGatherResource(unitId: string): CommandResult {
+    const state = this.state;
+    if (state.phase !== 'player') return { ok: false, reason: 'not-player-phase' };
+
+    const unit = state.units.find((u) => u.id === unitId);
+    if (!unit) return { ok: false, reason: 'unit-not-found' };
+    if (!isPlayerSide(unit)) return { ok: false, reason: 'not-own-unit' };
+    if (state.turnState.hasActed[unitId]) return { ok: false, reason: 'already-acted' };
+
+    const tile = getTile(state.map, unit.coord);
+    if (!tile || tile.resourceAmount <= 0) return { ok: false, reason: 'no-resource-here' };
+
+    this.undoStack.push(structuredClone(state));
+    const amount = GATHER_AMOUNT;
+    state.inventory.resource += amount;
+    state.map = setTile(state.map, { ...tile, resourceAmount: 0 });
+    state.turnState.hasActed[unitId] = true;
+    this.emit({
+      type: 'ResourceGathered',
+      unitId,
+      amount,
+      inventoryAfter: state.inventory.resource,
+    });
+
+    return { ok: true };
+  }
+
+  private handleBuildRobot(_robotKind: 'scout'): CommandResult {
+    const state = this.state;
+    if (state.phase !== 'player') return { ok: false, reason: 'not-player-phase' };
+
+    const player = state.units.find((u) => u.kind === 'player' && u.id === 'player');
+    if (!player) return { ok: false, reason: 'unit-not-found' };
+    if (state.turnState.hasActed[player.id]) return { ok: false, reason: 'already-acted' };
+    if (!equals(player.coord, state.pod.coord)) return { ok: false, reason: 'not-on-pod' };
+    if (state.inventory.resource < SCOUT_COST)
+      return { ok: false, reason: 'insufficient-resource' };
+
+    const placement = HEX_DIRECTIONS.map((direction) => add(state.pod.coord, direction)).find(
+      (coord) => {
+        if (!inBounds(state.map, coord)) return false;
+        const tile = getTile(state.map, coord);
+        return Boolean(tile && tile.terrain === 'passable' && !occupantAt(state.units, coord));
+      }
+    );
+    if (!placement) return { ok: false, reason: 'occupied' };
+
+    this.undoStack.push(structuredClone(state));
+    const robotId = `r${state.units.filter((u) => u.kind === 'robot').length}`;
+    const scout = createScout(robotId, placement);
+    state.units.push(scout);
+    state.inventory.resource -= SCOUT_COST;
+    state.turnState.hasActed[player.id] = true;
+    state.turnState.movementLeft[scout.id] = 0;
+    state.turnState.hasActed[scout.id] = true;
+
+    const { map, nowVisible } = updateVisibility(state.map, state.units.filter(isPlayerSide));
+    state.map = map;
+
+    this.emit({ type: 'RobotBuilt', robotId: scout.id, robotKind: 'scout', coord: scout.coord });
+    if (nowVisible.length > 0) {
+      this.emit({ type: 'FogRevealed', nowVisible });
+    }
 
     return { ok: true };
   }

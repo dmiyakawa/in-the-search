@@ -29,9 +29,25 @@ const findVisibleTargetId = (service: GameService, target: Hex): string | undefi
   return state.nests.find((n) => n.coord.q === target.q && n.coord.r === target.r)?.id;
 };
 
-const dispatchForTarget = (service: GameService, target: Hex): void => {
+const findPlayerSideUnitId = (service: GameService, target: Hex): string | undefined => {
   const state = service.getState();
-  const unit = state.units.find((u) => u.id === playerUnitId && isPlayerSide(u));
+  return state.units.find(
+    (u) => isPlayerSide(u) && u.coord.q === target.q && u.coord.r === target.r
+  )?.id;
+};
+
+const currentPlayerSideUnitId = (
+  service: GameService,
+  selectedUnitId: string
+): string | undefined => {
+  const state = service.getState();
+  if (state.units.some((u) => u.id === selectedUnitId && isPlayerSide(u))) return selectedUnitId;
+  return state.units.find(isPlayerSide)?.id;
+};
+
+const dispatchForTarget = (service: GameService, selectedUnitId: string, target: Hex): void => {
+  const state = service.getState();
+  const unit = state.units.find((u) => u.id === selectedUnitId && isPlayerSide(u));
   if (!unit || state.status !== 'playing') return;
 
   const targetId = findVisibleTargetId(service, target);
@@ -50,12 +66,23 @@ export const createInputController = (
   canvas: HTMLCanvasElement,
   service: GameService,
   getView: () => View,
-  onChanged?: () => void
+  onChanged?: () => void,
+  getSelectedUnitId: () => string = () => playerUnitId,
+  setSelectedUnitId: (unitId: string) => void = () => undefined
 ): InputController => {
   const onClick = (event: MouseEvent): void => {
     const point = canvasPoint(canvas, event);
     const view = getView();
-    dispatchForTarget(service, pixelToHex(point.x, point.y, view.size, view.origin));
+    const target = pixelToHex(point.x, point.y, view.size, view.origin);
+    const selectedOwnUnit = findPlayerSideUnitId(service, target);
+    if (selectedOwnUnit) {
+      setSelectedUnitId(selectedOwnUnit);
+      onChanged?.();
+      return;
+    }
+    const selectedUnitId = currentPlayerSideUnitId(service, getSelectedUnitId());
+    if (!selectedUnitId) return;
+    dispatchForTarget(service, selectedUnitId, target);
   };
 
   const keyDirections: Record<string, number> = {
@@ -66,6 +93,18 @@ export const createInputController = (
   };
 
   const onKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      const state = service.getState();
+      const units = state.units.filter(isPlayerSide);
+      if (units.length === 0) return;
+      const currentIndex = units.findIndex((u) => u.id === getSelectedUnitId());
+      const next = units[(currentIndex + 1) % units.length] ?? units[0]!;
+      setSelectedUnitId(next.id);
+      onChanged?.();
+      return;
+    }
+
     if (event.key.toLowerCase() === 'e') {
       service.dispatch({ type: 'EndTurn' });
       return;
@@ -74,15 +113,26 @@ export const createInputController = (
       if (service.undo()) onChanged?.();
       return;
     }
+    if (event.key.toLowerCase() === 'g') {
+      const selectedUnitId = currentPlayerSideUnitId(service, getSelectedUnitId());
+      if (selectedUnitId) service.dispatch({ type: 'GatherResource', unitId: selectedUnitId });
+      return;
+    }
+    if (event.key.toLowerCase() === 'b') {
+      service.dispatch({ type: 'BuildRobot', robotKind: 'scout' });
+      return;
+    }
 
     const dirIndex = keyDirections[event.key];
     if (dirIndex === undefined) return;
     const state = service.getState();
-    const unit = state.units.find((u) => u.id === playerUnitId && isPlayerSide(u));
+    const selectedUnitId = currentPlayerSideUnitId(service, getSelectedUnitId());
+    if (!selectedUnitId) return;
+    const unit = state.units.find((u) => u.id === selectedUnitId && isPlayerSide(u));
     const direction = HEX_DIRECTIONS[dirIndex];
     if (!unit || !direction) return;
     event.preventDefault();
-    dispatchForTarget(service, add(unit.coord, direction));
+    dispatchForTarget(service, selectedUnitId, add(unit.coord, direction));
   };
 
   canvas.addEventListener('click', onClick);

@@ -8,15 +8,17 @@ import {
   createEnemy,
   createPlayer,
   createScout,
+  GATHER_AMOUNT,
   MAP_RADIUS,
   POD_DEFENSE,
   POD_HP,
+  SCOUT_COST,
 } from '../../src/domain/units';
 
 const makeState = (units: GameState['units'], mapRadius = 3): GameState => {
-  const player = units.find((u) => u.kind === 'player');
   const map = createEmptyMap(mapRadius);
   const { map: visibleMap } = updateVisibilityIfPlayer(map, units);
+  const playerSideUnits = units.filter((u) => u.kind === 'player' || u.kind === 'robot');
   return {
     map: visibleMap,
     units,
@@ -27,8 +29,8 @@ const makeState = (units: GameState['units'], mapRadius = 3): GameState => {
     phase: 'player',
     status: 'playing',
     turnState: {
-      movementLeft: player ? { [player.id]: player.movement } : {},
-      hasActed: player ? { [player.id]: false } : {},
+      movementLeft: Object.fromEntries(playerSideUnits.map((u) => [u.id, u.movement])),
+      hasActed: Object.fromEntries(playerSideUnits.map((u) => [u.id, false])),
     },
     rngState: 0,
   };
@@ -225,6 +227,125 @@ describe('GameService', () => {
 
     expect(result).toEqual({ ok: false, reason: 'target-not-enemy' });
     expect(service.getState().units.find((u) => u.id === 'r0')?.hp).toBe(scout.maxHp);
+  });
+
+  test('GatherResource adds inventory, depletes tile, marks unit acted, and emits event', () => {
+    const player = createPlayer('player', { q: 0, r: 0 });
+    const state = makeState([player]);
+    const tile = getTile(state.map, player.coord)!;
+    state.map = setTile(state.map, { ...tile, resourceAmount: GATHER_AMOUNT });
+    const service = new GameService(state);
+    const events: DomainEvent[] = [];
+    service.subscribe((e) => events.push(e));
+
+    const result = service.dispatch({ type: 'GatherResource', unitId: 'player' });
+
+    expect(result).toEqual({ ok: true });
+    expect(service.getState().inventory.resource).toBe(GATHER_AMOUNT);
+    expect(getTile(service.getState().map, player.coord)?.resourceAmount).toBe(0);
+    expect(service.getState().turnState.hasActed.player).toBe(true);
+    expect(events).toContainEqual({
+      type: 'ResourceGathered',
+      unitId: 'player',
+      amount: GATHER_AMOUNT,
+      inventoryAfter: GATHER_AMOUNT,
+    });
+  });
+
+  test('GatherResource rejects when no resource exists', () => {
+    const service = new GameService(makeState([createPlayer('player', { q: 0, r: 0 })]));
+
+    const result = service.dispatch({ type: 'GatherResource', unitId: 'player' });
+
+    expect(result).toEqual({ ok: false, reason: 'no-resource-here' });
+  });
+
+  test('GatherResource rejects already acted unit', () => {
+    const player = createPlayer('player', { q: 0, r: 0 });
+    const state = makeState([player]);
+    state.turnState.hasActed.player = true;
+    const tile = getTile(state.map, player.coord)!;
+    state.map = setTile(state.map, { ...tile, resourceAmount: GATHER_AMOUNT });
+    const service = new GameService(state);
+
+    const result = service.dispatch({ type: 'GatherResource', unitId: 'player' });
+
+    expect(result).toEqual({ ok: false, reason: 'already-acted' });
+  });
+
+  test('BuildRobot creates a scout adjacent to pod and consumes resources', () => {
+    const player = createPlayer('player', { q: 0, r: 0 });
+    const state = makeState([player]);
+    state.pod.coord = player.coord;
+    state.inventory.resource = SCOUT_COST;
+    const service = new GameService(state);
+    const events: DomainEvent[] = [];
+    service.subscribe((e) => events.push(e));
+
+    const result = service.dispatch({ type: 'BuildRobot', robotKind: 'scout' });
+    const next = service.getState();
+    const scout = next.units.find((u) => u.id === 'r0');
+
+    expect(result).toEqual({ ok: true });
+    expect(scout).toMatchObject({
+      id: 'r0',
+      kind: 'robot',
+      robotKind: 'scout',
+      coord: { q: 1, r: 0 },
+    });
+    expect(next.inventory.resource).toBe(0);
+    expect(next.turnState.hasActed.player).toBe(true);
+    expect(next.turnState.movementLeft.r0).toBe(0);
+    expect(next.turnState.hasActed.r0).toBe(true);
+    expect(events).toContainEqual({
+      type: 'RobotBuilt',
+      robotId: 'r0',
+      robotKind: 'scout',
+      coord: { q: 1, r: 0 },
+    });
+  });
+
+  test('BuildRobot rejects when player is not on pod', () => {
+    const player = createPlayer('player', { q: 1, r: 0 });
+    const state = makeState([player]);
+    state.pod.coord = { q: 0, r: 0 };
+    state.inventory.resource = SCOUT_COST;
+    const service = new GameService(state);
+
+    const result = service.dispatch({ type: 'BuildRobot', robotKind: 'scout' });
+
+    expect(result).toEqual({ ok: false, reason: 'not-on-pod' });
+  });
+
+  test('BuildRobot rejects when resources are insufficient', () => {
+    const player = createPlayer('player', { q: 0, r: 0 });
+    const state = makeState([player]);
+    state.pod.coord = player.coord;
+    state.inventory.resource = SCOUT_COST - 1;
+    const service = new GameService(state);
+
+    const result = service.dispatch({ type: 'BuildRobot', robotKind: 'scout' });
+
+    expect(result).toEqual({ ok: false, reason: 'insufficient-resource' });
+  });
+
+  test('BuildRobot skips occupied placement and uses existing robot count for id', () => {
+    const player = createPlayer('player', { q: 0, r: 0 });
+    const existingScout = createScout('r0', { q: 1, r: 0 });
+    const state = makeState([player, existingScout]);
+    state.pod.coord = player.coord;
+    state.inventory.resource = SCOUT_COST;
+    const service = new GameService(state);
+
+    const result = service.dispatch({ type: 'BuildRobot', robotKind: 'scout' });
+    const next = service.getState();
+
+    expect(result).toEqual({ ok: true });
+    expect(next.units.find((u) => u.id === 'r1')).toMatchObject({
+      id: 'r1',
+      kind: 'robot',
+      coord: { q: 1, r: -1 },
+    });
   });
 
   test('EndTurn runs enemy phase', () => {

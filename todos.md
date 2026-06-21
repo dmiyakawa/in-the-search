@@ -21,6 +21,9 @@
   併せてタスク `20260621_012` で**アンドゥ＋敵相プレビュー（決定的予見可能性の操作実装）**を実装完了。
   `simulateEnemyPhase`、`GameService.undo()` / `previewEnemyPhase()`、Canvas/HUDプレビュー、`U`キーUndoを追加。
   `logs/20260621_012_impl_foreseeability.result.md` 参照。
+- 2026-06-21: タスク `20260621_013` で **Phase 5（ロボット/資源の最小スライス）**を実装完了。
+  `GatherResource` / `BuildRobot`、scout建造、翌ターンのscout操作、Tabでの自ユニット切替、G採取/B建造を追加。
+  `logs/20260621_013_impl_phase5_resource_robot.result.md` 参照。
 - `tbd.md` の T-04・G-04・G-06・G-09 は暫定案のまま進行可能。
 
 ## 本リストの読み方（実装担当エージェント向け・重要）
@@ -69,12 +72,12 @@
 
 ## Phase 5: ロボット/資源の最小スライス
 
-- [ ] **`GatherResource` ハンドラ** — `GameService.dispatch`
+- [x] **`GatherResource` ハンドラ** — `GameService.dispatch`
   - 要点: 自ユニットが乗るタイルの `resourceAmount>0` 否なら `no-resource-here`。可なら
     `inventory.resource += GATHER_AMOUNT`、当該タイル `resourceAmount=0`、`hasActed[unit]=true`、
     emit `ResourceGathered`。`rule.md §7`。
   - テスト: 採取で在庫加算・タイル枯渇・資源なしで拒否・採取後そのユニットは行動終了。
-- [ ] **`BuildRobot` ハンドラ** — pod 上のプレイヤー本体のみ
+- [x] **`BuildRobot` ハンドラ** — pod 上のプレイヤー本体のみ
   - ✅ **前提確定**: 建造ルールは `decisions.md` D-12（ポッドは固定建造物・建造は pod 上のプレイヤー本体のみ）で確定。
     「pod 上か」の判定は **プレイヤー本体の `coord` が `GameState.pod.coord` と一致するか**で行う（feature タイルではなく pod 構造体で判定）。
   - 要点（`rule.md §7`・D-12）: プレイヤー本体が pod タイル上か否（否なら
@@ -83,10 +86,10 @@
     `r0,r1,...`（既存ロボット数で採番）、当ターンは `movementLeft=0`・`hasActed=true`→
     `inventory.resource-=SCOUT_COST`、`hasActed[player]=true`、emit `RobotBuilt`。
   - テスト: 建造で scout 追加・コスト減算・pod 外で拒否・資源不足で拒否・配置先が空きマス・id 採番。
-- [ ] **ロボット操作と霧拡張** — scout の高視界/高移動を確認
+- [x] **ロボット操作と霧拡張** — scout の高視界/高移動を確認
   - 要点: 次ターン以降 scout も `turnState` に入り操作可（視界4/移動3）。InputController に自ユニット切替を追加。
   - テスト（結合）: scout 建造→翌ターン scout 移動で霧が本体より広く晴れる。
-- [ ] **資源/建造の結合テスト** — `tests/integration/` で採取→建造→探索の一連を `GameService` 駆動で検証。
+- [x] **資源/建造の結合テスト** — `tests/integration/` で採取→建造→探索の一連を `GameService` 駆動で検証。
 
 ## Phase 6: テスト整備
 
